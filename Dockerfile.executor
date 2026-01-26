@@ -1,0 +1,39 @@
+# Executor Service Dockerfile
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY cmd/executor-api/ ./cmd/executor-api/
+COPY internal/ ./internal/
+COPY pkg/ ./pkg/
+
+# Build the application
+RUN cd cmd/executor-api && \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /go/bin/executor-service .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+# Copy the binary from builder
+COPY --from=builder /go/bin/executor-service .
+
+# Expose port
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1
+
+# Run the binary
+CMD ["./executor-service"]

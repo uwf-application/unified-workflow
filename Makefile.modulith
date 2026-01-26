@@ -1,0 +1,185 @@
+# Modulith Architecture Build Makefile
+# Builds separate binaries for each component
+# Note: Primitive Service has been removed - primitives are now a library
+
+.PHONY: all clean build-registry build-executor build-worker build-all test
+
+# Binary names
+REGISTRY_BINARY := registry-service
+EXECUTOR_BINARY := executor-service
+WORKER_BINARY := workflow-worker
+
+# Build directories
+BUILD_DIR := ./build
+BIN_DIR := $(BUILD_DIR)/bin
+
+# Go build flags
+GO_BUILD_FLAGS := -v
+GO_LDFLAGS := -s -w
+
+all: build-all
+
+# Create build directories
+$(BIN_DIR):
+	@mkdir -p $(BIN_DIR)
+
+# Build Registry Service
+build-registry: $(BIN_DIR)
+	@echo "Building Registry Service..."
+	@cd cmd/registry-api && go build $(GO_BUILD_FLAGS) -ldflags="$(GO_LDFLAGS)" -o ../../$(BIN_DIR)/$(REGISTRY_BINARY) .
+	@echo "Registry Service built: $(BIN_DIR)/$(REGISTRY_BINARY)"
+
+# Build Executor Service
+build-executor: $(BIN_DIR)
+	@echo "Building Executor Service..."
+	@cd cmd/executor-api && go build $(GO_BUILD_FLAGS) -ldflags="$(GO_LDFLAGS)" -o ../../$(BIN_DIR)/$(EXECUTOR_BINARY) .
+	@echo "Executor Service built: $(BIN_DIR)/$(EXECUTOR_BINARY)"
+	@echo "Note: Primitives are compiled into Executor as a library"
+
+# Build Worker Service
+build-worker: $(BIN_DIR)
+	@echo "Building Worker Service..."
+	@cd cmd/workflow-worker && go build $(GO_BUILD_FLAGS) -ldflags="$(GO_LDFLAGS)" -o ../../$(BIN_DIR)/$(WORKER_BINARY) .
+	@echo "Worker Service built: $(BIN_DIR)/$(WORKER_BINARY)"
+
+# Build all services
+build-all: build-registry build-executor build-worker
+	@echo "All services built successfully!"
+	@echo ""
+	@echo "Binaries available in: $(BIN_DIR)"
+	@echo "  - Registry Service:   $(REGISTRY_BINARY)"
+	@echo "  - Executor Service:   $(EXECUTOR_BINARY) (with primitives compiled in)"
+	@echo "  - Worker Service:     $(WORKER_BINARY)"
+	@echo ""
+	@echo "To run all services:"
+	@echo "  make run-all-bg"
+
+# Run Registry Service
+run-registry: build-registry
+	@echo "Starting Registry Service..."
+	@cd $(BIN_DIR) && ./$(REGISTRY_BINARY)
+
+# Run Executor Service
+run-executor: build-executor
+	@echo "Starting Executor Service..."
+	@cd $(BIN_DIR) && ./$(EXECUTOR_BINARY)
+
+# Run all services in separate terminals (macOS)
+run-all-mac: build-all
+	@echo "Starting all services in separate terminals..."
+	@osascript -e 'tell app "Terminal" to do script "cd $(PWD)/$(BIN_DIR) && ./$(REGISTRY_BINARY)"'
+	@sleep 2
+	@osascript -e 'tell app "Terminal" to do script "cd $(PWD)/$(BIN_DIR) && ./$(EXECUTOR_BINARY)"'
+	@echo "All services started. Check separate terminal windows."
+
+# Run all services in background
+run-all-bg: build-all
+	@echo "Starting all services in background..."
+	@cd $(BIN_DIR) && ./$(REGISTRY_BINARY) > registry.log 2>&1 &
+	@sleep 2
+	@cd $(BIN_DIR) && ./$(EXECUTOR_BINARY) > executor.log 2>&1 &
+	@echo "All services started in background."
+	@echo "Check logs: registry.log, executor.log"
+
+# Stop all background services
+stop-all:
+	@echo "Stopping all background services..."
+	@pkill -f "$(REGISTRY_BINARY)" || true
+	@pkill -f "$(EXECUTOR_BINARY)" || true
+	@echo "All services stopped."
+
+# Test service connectivity
+test-connectivity:
+	@echo "Testing service connectivity..."
+	@echo "1. Testing Registry Service..."
+	@curl -s http://localhost:8080/health || echo "Registry Service not responding"
+	@echo ""
+	@echo "2. Testing Executor Service..."
+	@curl -s http://localhost:8081/health || echo "Executor Service not responding"
+	@echo ""
+	@echo "Connectivity test completed."
+
+# Test workflow lifecycle with Docker Compose
+test-lifecycle:
+	@echo "=== Testing Workflow Lifecycle with Docker Compose ==="
+	@echo "1. Building and starting all services..."
+	@docker-compose up --build -d
+	@sleep 30
+	@echo ""
+	@echo "2. Running workflow lifecycle test..."
+	@./test-workflow-lifecycle.sh || (echo "Test failed, showing logs..." && docker-compose logs --tail=50 && exit 1)
+	@echo ""
+	@echo "3. Stopping services..."
+	@docker-compose down
+	@echo "Workflow lifecycle test completed successfully!"
+
+# Quick test (assumes services are already running)
+test-quick:
+	@echo "Running quick workflow lifecycle test..."
+	@./test-workflow-lifecycle.sh
+	@echo "Quick test completed!"
+
+# Local test (builds and tests locally without Docker)
+test-local:
+	@echo "=== Testing Workflow Lifecycle Locally ==="
+	@echo "1. Building all services..."
+	@make -f Makefile.modulith build-all
+	@echo ""
+	@echo "2. Running local lifecycle test..."
+	@./test-local-lifecycle.sh
+	@echo ""
+	@echo "3. Stopping services..."
+	@make -f Makefile.modulith stop-all
+	@echo "Local workflow lifecycle test completed successfully!"
+
+# Clean build artifacts
+clean:
+	@echo "Cleaning build artifacts..."
+	@rm -rf $(BUILD_DIR)
+	@echo "Clean completed."
+
+# Show service information
+info:
+	@echo "=== Modulith Architecture Services ==="
+	@echo ""
+	@echo "Service Components:"
+	@echo "  1. Registry Service"
+	@echo "     - Port: 8080"
+	@echo "     - Purpose: Workflow definition storage and management"
+	@echo "     - Location: Bank Data Center"
+	@echo ""
+	@echo "  2. Executor Service"
+	@echo "     - Port: 8081"
+	@echo "     - Purpose: Workflow execution engine"
+	@echo "     - Location: Bank Data Center"
+	@echo "     - Traces: All transaction traces stay in Bank DC"
+	@echo "     - Note: Primitives are compiled as a library"
+	@echo ""
+	@echo "  3. Worker Service"
+	@echo "     - Purpose: Background workflow processing"
+	@echo "     - Communication: NATS message queue"
+	@echo "     - Location: Bank Data Center"
+	@echo ""
+	@echo "Build Commands:"
+	@echo "  make build-all          # Build all services"
+	@echo "  make build-registry     # Build only Registry Service"
+	@echo "  make build-executor     # Build only Executor Service"
+	@echo "  make build-worker       # Build only Worker Service"
+	@echo ""
+	@echo "Run Commands:"
+	@echo "  make run-all-mac        # Run all in separate terminals (macOS)"
+	@echo "  make run-all-bg         # Run all in background"
+	@echo "  make stop-all           # Stop all background services"
+	@echo ""
+	@echo "Test Commands:"
+	@echo "  make test-local         # Build and test locally"
+	@echo "  make test-lifecycle     # Test with Docker Compose"
+	@echo "  make test-connectivity  # Test service connectivity"
+	@echo ""
+	@echo "Other Commands:"
+	@echo "  make clean              # Clean build artifacts"
+	@echo "  make info               # Show this information"
+	@echo ""
+
+# Default target
+.DEFAULT_GOAL := info
