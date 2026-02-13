@@ -1,0 +1,312 @@
+name: Release Components
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v1.0.0, v1.1.0, etc.
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch all history for proper versioning
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.25'
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "VERSION=${VERSION}"
+    
+    - name: Run tests
+      run: |
+        go test ./... -short
+    
+    - name: Build Registry Service
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.registry
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/uwf-registry:${{ steps.version.outputs.VERSION }}
+          ghcr.io/${{ github.repository_owner }}/uwf-registry:latest
+        push: false  # Don't push yet, we'll push all at once
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Build Executor Service
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.executor
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/uwf-executor:${{ steps.version.outputs.VERSION }}
+          ghcr.io/${{ github.repository_owner }}/uwf-executor:latest
+        push: false
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Build Worker Service
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.worker
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/uwf-worker:${{ steps.version.outputs.VERSION }}
+          ghcr.io/${{ github.repository_owner }}/uwf-worker:latest
+        push: false
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Login to GitHub Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Push Docker images
+      if: github.event_name != 'pull_request'
+      run: |
+        # Push all images
+        docker push ghcr.io/${{ github.repository_owner }}/uwf-registry:${{ steps.version.outputs.VERSION }}
+        docker push ghcr.io/${{ github.repository_owner }}/uwf-registry:latest
+        docker push ghcr.io/${{ github.repository_owner }}/uwf-executor:${{ steps.version.outputs.VERSION }}
+        docker push ghcr.io/${{ github.repository_owner }}/uwf-executor:latest
+        docker push ghcr.io/${{ github.repository_owner }}/uwf-worker:${{ steps.version.outputs.VERSION }}
+        docker push ghcr.io/${{ github.repository_owner }}/uwf-worker:latest
+    
+    - name: Build binaries
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        BIN_DIR="binaries-${VERSION}"
+        
+        # Create directory for binaries
+        mkdir -p "$BIN_DIR"
+        
+        # Build all binaries
+        echo "Building registry binary..."
+        go build -o "$BIN_DIR/registry-service" ./cmd/registry-api
+        
+        echo "Building executor binary..."
+        go build -o "$BIN_DIR/executor-service" ./cmd/executor-api
+        
+        echo "Building worker binary..."
+        go build -o "$BIN_DIR/workflow-worker" ./cmd/workflow-worker
+        
+        # Create binaries archive
+        tar -czf unified-workflow-binaries-${VERSION}.tar.gz -C "$BIN_DIR" .
+        
+        # Create checksum
+        shasum -a 256 unified-workflow-binaries-${VERSION}.tar.gz > unified-workflow-binaries-${VERSION}.sha256
+        
+        # List binaries
+        ls -lh "$BIN_DIR"/
+        echo "Binaries archive size: $(du -h unified-workflow-binaries-${VERSION}.tar.gz | cut -f1)"
+    
+    - name: Create release bundle
+      run: |
+        # Create release directory
+        mkdir -p release-bundle
+        
+        # Copy essential files
+        cp docker-compose.yml release-bundle/
+        cp README.md release-bundle/
+        cp LICENSE release-bundle/ 2>/dev/null || true
+        
+        # Create versioned docker-compose file
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        REGISTRY="ghcr.io/${{ github.repository_owner }}"
+        
+        sed "s|build:|image: ${REGISTRY}/uwf-|g" docker-compose.yml | \
+        sed "s|context: .||g" | \
+        sed "s|dockerfile: Dockerfile.registry|registry:${VERSION}|g" | \
+        sed "s|dockerfile: Dockerfile.executor|executor:${VERSION}|g" | \
+        sed "s|dockerfile: Dockerfile.worker|worker:${VERSION}|g" > release-bundle/docker-compose.${VERSION}.yml
+        
+        # Create deployment guide
+        cat > release-bundle/DEPLOYMENT.md << EOF
+        # Unified Workflow ${{ steps.version.outputs.VERSION }} - Deployment Guide
+        
+        ## Quick Start
+        
+        ### Using Docker Compose
+        \`\`\`bash
+        docker-compose -f docker-compose.${{ steps.version.outputs.VERSION }}.yml up -d
+        \`\`\`
+        
+        ### Using Binaries
+        \`\`\`bash
+        # Download binaries archive
+        # Extract and run
+        tar -xzf unified-workflow-binaries-${{ steps.version.outputs.VERSION }}.tar.gz
+        ./registry-service
+        ./executor-service
+        ./workflow-worker
+        \`\`\`
+        
+        ## Service Information
+        
+        - **Registry**: Port 8080, Health: /health
+        - **Executor**: Port 8081, Health: /health
+        - **Worker**: No exposed ports
+        
+        ## Documentation
+        
+        Full documentation available at: https://github.com/${{ github.repository }}
+        EOF
+        
+        # Create bundle archive
+        tar -czf unified-workflow-stack-${{ steps.version.outputs.VERSION }}.tar.gz release-bundle/
+        
+        # Create checksum
+        shasum -a 256 unified-workflow-stack-${{ steps.version.outputs.VERSION }}.tar.gz > unified-workflow-stack-${{ steps.version.outputs.VERSION }}.sha256
+        
+        # List created files
+        ls -la unified-workflow-*${{ steps.version.outputs.VERSION }}.*
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name != 'pull_request'
+      with:
+        files: |
+          unified-workflow-stack-${{ steps.version.outputs.VERSION }}.tar.gz
+          unified-workflow-stack-${{ steps.version.outputs.VERSION }}.sha256
+          unified-workflow-binaries-${{ steps.version.outputs.VERSION }}.tar.gz
+          unified-workflow-binaries-${{ steps.version.outputs.VERSION }}.sha256
+        generate_release_notes: true
+        prerelease: false
+    
+    - name: Update release description
+      if: github.event_name != 'pull_request'
+      run: |
+        # Get the latest release
+        LATEST_RELEASE=$(gh release view ${{ steps.version.outputs.VERSION }} --json body -q .body)
+        
+        # Create enhanced release notes
+        ENHANCED_NOTES=$(cat << EOF
+        # Unified Workflow ${{ steps.version.outputs.VERSION }}
+        
+        ## 🚀 Components Released
+        
+        ### Docker Images
+        - **Registry Service**: \`ghcr.io/${{ github.repository_owner }}/uwf-registry:${{ steps.version.outputs.VERSION }}\`
+        - **Executor Service**: \`ghcr.io/${{ github.repository_owner }}/uwf-executor:${{ steps.version.outputs.VERSION }}\`
+        - **Worker Service**: \`ghcr.io/${{ github.repository_owner }}/uwf-worker:${{ steps.version.outputs.VERSION }}\`
+        
+        ### Quick Deployment
+        \`\`\`bash
+        # Using Docker Compose
+        curl -L -o docker-compose.${{ steps.version.outputs.VERSION }}.yml \\
+          https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION }}/docker-compose.${{ steps.version.outputs.VERSION }}.yml
+        docker-compose -f docker-compose.${{ steps.version.outputs.VERSION }}.yml up -d
+        \`\`\`
+        
+        ### Verification
+        \`\`\`bash
+        curl http://localhost:8080/health  # Registry
+        curl http://localhost:8081/health  # Executor
+        \`\`\`
+        
+        ## 📦 Release Bundle
+        Download \`unified-workflow-${{ steps.version.outputs.VERSION }}.tar.gz\` for complete deployment package.
+        
+        ## 🔒 Security
+        Verify the download with the provided SHA256 checksum.
+        
+        ## 📚 Documentation
+        Full documentation available in the repository.
+        
+        ---
+        
+        $LATEST_RELEASE
+        EOF
+        )
+        
+        # Update the release
+        gh release edit ${{ steps.version.outputs.VERSION }} --notes "$ENHANCED_NOTES"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: Multi-architecture builds
+  multi-arch:
+    needs: build-and-release
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+    
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Build and push multi-arch Registry Service
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.registry
+        platforms: ${{ matrix.platform }}
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/uwf-registry:${{ steps.version.outputs.VERSION }}-${{ matrix.platform##*/ }}
+        push: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Build and push multi-arch Executor Service
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.executor
+        platforms: ${{ matrix.platform }}
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/uwf-executor:${{ steps.version.outputs.VERSION }}-${{ matrix.platform##*/ }}
+        push: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Build and push multi-arch Worker Service
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile.worker
+        platforms: ${{ matrix.platform }}
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/uwf-worker:${{ steps.version.outputs.VERSION }}-${{ matrix.platform##*/ }}
+        push: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
