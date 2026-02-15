@@ -3,15 +3,18 @@ package primitive
 import (
 	"fmt"
 	"sync"
+	"unified-workflow/internal/primitive/services/antifraud/models"
+	serviceclientsantifraud "unified-workflow/internal/serviceclients/antifraud"
 )
 
 // Primitive is the global struct that provides access to all services
 // This enables the syntax: primitive.Default.Storage.Save(data)
 type Primitive struct {
-	Storage StorageService
-	Echo    EchoService
-	HTTP    HTTPService
-	DB      DatabaseService
+	Storage   StorageService
+	Echo      EchoService
+	HTTP      HTTPService
+	DB        DatabaseService
+	Antifraud AntifraudService
 }
 
 var (
@@ -42,10 +45,18 @@ func Init(config *Config) error {
 			return
 		}
 
+		// Initialize antifraud service
+		antifraudService, err := initAntifraudService(config)
+		if err != nil {
+			initErr = fmt.Errorf("failed to initialize antifraud service: %w", err)
+			return
+		}
+
 		// Create the global instance
 		Default = &Primitive{
-			Storage: storageService,
-			Echo:    echoService,
+			Storage:   storageService,
+			Echo:      echoService,
+			Antifraud: antifraudService,
 			// HTTP and DB services can be added later
 		}
 	})
@@ -69,6 +80,16 @@ type Config struct {
 	// Database configuration
 	DBConnectionString string
 	DBMaxConnections   int
+
+	// Antifraud configuration
+	AntifraudAPIKey                  string
+	AntifraudAPIHost                 string
+	AntifraudTimeout                 int
+	AntifraudEnabled                 bool
+	AntifraudMaxRetries              int
+	AntifraudCircuitBreakerEnabled   bool
+	AntifraudCircuitBreakerThreshold int
+	AntifraudCircuitBreakerTimeout   int
 }
 
 // initStorageService initializes the storage service with proxy
@@ -189,6 +210,127 @@ func MustInit(config *Config) {
 // IsInitialized returns true if the global primitive instance has been initialized
 func IsInitialized() bool {
 	return Default != nil
+}
+
+// initAntifraudService initializes the antifraud service with proxy
+func initAntifraudService(config *Config) (AntifraudService, error) {
+	// Create antifraud client config
+	afConfig := models.ClientConfig{
+		APIKey:                  config.AntifraudAPIKey,
+		Host:                    config.AntifraudAPIHost,
+		Timeout:                 config.AntifraudTimeout,
+		Enabled:                 config.AntifraudEnabled,
+		MaxRetries:              config.AntifraudMaxRetries,
+		CircuitBreakerEnabled:   config.AntifraudCircuitBreakerEnabled,
+		CircuitBreakerThreshold: config.AntifraudCircuitBreakerThreshold,
+		CircuitBreakerTimeout:   config.AntifraudCircuitBreakerTimeout,
+	}
+
+	// Create the actual antifraud client from serviceclients
+	antifraudClient, err := serviceclientsantifraud.NewClient(afConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create antifraud client: %w", err)
+	}
+
+	// Wrap with proxy for logging, metrics, and circuit breaking
+	antifraudProxy := serviceclientsantifraud.NewProxy(antifraudClient, afConfig)
+
+	// Create adapter to convert between concrete types and interface{}
+	return &antifraudAdapter{
+		service: antifraudProxy,
+		config:  config,
+	}, nil
+}
+
+// antifraudAdapter adapts the concrete antifraud service to the primitive.AntifraudService interface
+type antifraudAdapter struct {
+	service interface {
+		StoreTransaction(models.AF_Transaction) error
+		ValidateTransactionByAML(models.AF_Transaction) (models.ServiceResolution, error)
+		ValidateTransactionByFC(models.AF_Transaction) (models.ServiceResolution, error)
+		ValidateTransactionByML(models.AF_Transaction) (models.ServiceResolution, error)
+		StoreServiceResolution(models.ServiceResolution) error
+		AddTransactionServiceCheck(models.ServiceResolution) error
+		FinalizeTransaction(models.AF_Transaction) (models.FinalResolution, error)
+		StoreFinalResolution(models.FinalResolution) error
+		HealthCheck() (bool, error)
+		GetConfig() models.ClientConfig
+	}
+	config *Config
+}
+
+func (a *antifraudAdapter) StoreTransaction(afTransaction interface{}) error {
+	// Convert interface{} to models.AF_Transaction
+	tx, ok := afTransaction.(models.AF_Transaction)
+	if !ok {
+		// Try to convert from map or other types
+		return fmt.Errorf("invalid transaction type: %T", afTransaction)
+	}
+	return a.service.StoreTransaction(tx)
+}
+
+func (a *antifraudAdapter) ValidateTransactionByAML(afTransaction interface{}) (interface{}, error) {
+	tx, ok := afTransaction.(models.AF_Transaction)
+	if !ok {
+		return nil, fmt.Errorf("invalid transaction type: %T", afTransaction)
+	}
+	return a.service.ValidateTransactionByAML(tx)
+}
+
+func (a *antifraudAdapter) ValidateTransactionByFC(afTransaction interface{}) (interface{}, error) {
+	tx, ok := afTransaction.(models.AF_Transaction)
+	if !ok {
+		return nil, fmt.Errorf("invalid transaction type: %T", afTransaction)
+	}
+	return a.service.ValidateTransactionByFC(tx)
+}
+
+func (a *antifraudAdapter) ValidateTransactionByML(afTransaction interface{}) (interface{}, error) {
+	tx, ok := afTransaction.(models.AF_Transaction)
+	if !ok {
+		return nil, fmt.Errorf("invalid transaction type: %T", afTransaction)
+	}
+	return a.service.ValidateTransactionByML(tx)
+}
+
+func (a *antifraudAdapter) StoreServiceResolution(resolution interface{}) error {
+	res, ok := resolution.(models.ServiceResolution)
+	if !ok {
+		return fmt.Errorf("invalid resolution type: %T", resolution)
+	}
+	return a.service.StoreServiceResolution(res)
+}
+
+func (a *antifraudAdapter) AddTransactionServiceCheck(resolution interface{}) error {
+	res, ok := resolution.(models.ServiceResolution)
+	if !ok {
+		return fmt.Errorf("invalid resolution type: %T", resolution)
+	}
+	return a.service.AddTransactionServiceCheck(res)
+}
+
+func (a *antifraudAdapter) FinalizeTransaction(afTransaction interface{}) (interface{}, error) {
+	tx, ok := afTransaction.(models.AF_Transaction)
+	if !ok {
+		return nil, fmt.Errorf("invalid transaction type: %T", afTransaction)
+	}
+	return a.service.FinalizeTransaction(tx)
+}
+
+func (a *antifraudAdapter) StoreFinalResolution(resolution interface{}) error {
+	res, ok := resolution.(models.FinalResolution)
+	if !ok {
+		return fmt.Errorf("invalid resolution type: %T", resolution)
+	}
+	return a.service.StoreFinalResolution(res)
+}
+
+func (a *antifraudAdapter) HealthCheck() (bool, error) {
+	return a.service.HealthCheck()
+}
+
+func (a *antifraudAdapter) GetConfig() interface{} {
+	return a.config
 }
 
 // ResetForTesting resets the global instance (for testing only)

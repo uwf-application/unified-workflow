@@ -3,6 +3,7 @@ module unified-workflow
 go 1.25.0
 
 require (
+	github.com/baraic-io/antifraud-go v0.0.11 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

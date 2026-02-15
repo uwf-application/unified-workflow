@@ -60,6 +60,39 @@ type DatabaseService interface {
 	Transaction(operations func(DatabaseService) error) error
 }
 
+// AntifraudService defines the interface for antifraud operations
+type AntifraudService interface {
+	// StoreTransaction stores a transaction in the antifraud system
+	StoreTransaction(afTransaction interface{}) error
+
+	// ValidateTransactionByAML validates a transaction using the AML service
+	ValidateTransactionByAML(afTransaction interface{}) (interface{}, error)
+
+	// ValidateTransactionByFC validates a transaction using the FC service
+	ValidateTransactionByFC(afTransaction interface{}) (interface{}, error)
+
+	// ValidateTransactionByML validates a transaction using the ML service
+	ValidateTransactionByML(afTransaction interface{}) (interface{}, error)
+
+	// StoreServiceResolution stores the resolution from a service check (AML, FC, LST)
+	StoreServiceResolution(resolution interface{}) error
+
+	// AddTransactionServiceCheck adds a completed service check resolution to the transaction aggregation process
+	AddTransactionServiceCheck(resolution interface{}) error
+
+	// FinalizeTransaction finalizes the transaction validation process and retrieves the final resolution
+	FinalizeTransaction(afTransaction interface{}) (interface{}, error)
+
+	// StoreFinalResolution stores the final resolution of the transaction
+	StoreFinalResolution(resolution interface{}) error
+
+	// HealthCheck checks the health of the antifraud service
+	HealthCheck() (bool, error)
+
+	// GetConfig returns the current configuration
+	GetConfig() interface{}
+}
+
 // ServiceRegistry provides access to all services
 type ServiceRegistry interface {
 	// Storage returns the storage service
@@ -73,6 +106,9 @@ type ServiceRegistry interface {
 
 	// Database returns the database service
 	Database() DatabaseService
+
+	// Antifraud returns the antifraud service
+	Antifraud() AntifraudService
 
 	// RegisterService registers a custom service
 	RegisterService(name string, service interface{}) error

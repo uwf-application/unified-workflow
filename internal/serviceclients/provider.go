@@ -3,19 +3,15 @@ package serviceclients
 import (
 	"fmt"
 
-	fraudservice "unified-workflow/internal/primitive/services/fraud"
-	paymentservice "unified-workflow/internal/primitive/services/payment"
-	"unified-workflow/internal/serviceclients/fraud"
-	"unified-workflow/internal/serviceclients/payment"
+	antifraudservice "unified-workflow/internal/primitive/services/antifraud"
+	"unified-workflow/internal/primitive/services/antifraud/models"
+	"unified-workflow/internal/serviceclients/antifraud"
 )
 
 // ClientProvider provides access to various service clients
 type ClientProvider interface {
-	// GetFraudClient returns a fraud detection client
-	GetFraudClient() (fraudservice.FraudService, error)
-
-	// GetPaymentClient returns a payment processing client
-	GetPaymentClient() (paymentservice.PaymentService, error)
+	// GetAntifraudClient returns an antifraud detection client
+	GetAntifraudClient() (antifraudservice.AntifraudService, error)
 
 	// Close closes all client connections
 	Close() error
@@ -23,43 +19,28 @@ type ClientProvider interface {
 
 // Config holds configuration for all service clients
 type Config struct {
-	Fraud   fraud.Config   `json:"fraud"`
-	Payment payment.Config `json:"payment"`
+	Antifraud models.ClientConfig `json:"antifraud"`
 }
 
 // DefaultClientProvider implements ClientProvider with default configurations
 type DefaultClientProvider struct {
-	config        *Config
-	fraudClient   fraudservice.FraudService
-	paymentClient paymentservice.PaymentService
-	initialized   bool
+	config          *Config
+	antifraudClient antifraudservice.AntifraudService
+	initialized     bool
 }
 
 // NewClientProvider creates a new client provider with default configuration
 func NewClientProvider() (*DefaultClientProvider, error) {
 	config := &Config{
-		Fraud: fraud.Config{
-			APIKey:        "demo_fraud_api_key",
-			APIURL:        "https://api.fraudservice.com/v1",
-			Timeout:       30,
-			MaxRetries:    3,
-			RiskThreshold: 75,
-			EnableMock:    true,
-			MockResponses: fraud.MockConfig{
-				DefaultRiskScore: 65,
-				DefaultAction:    "review",
-			},
-		},
-		Payment: payment.Config{
-			APIKey:     "demo_payment_api_key",
-			APIURL:     "https://api.paymentservice.com/v1",
-			Timeout:    30,
-			MaxRetries: 3,
-			EnableMock: true,
-			MockResponses: payment.MockConfig{
-				DefaultStatus: "completed",
-				SuccessRate:   0.95,
-			},
+		Antifraud: models.ClientConfig{
+			APIKey:                  "demo_antifraud_api_key",
+			Host:                    "https://api.antifraudservice.com/v1",
+			Timeout:                 30,
+			Enabled:                 true,
+			MaxRetries:              3,
+			CircuitBreakerEnabled:   true,
+			CircuitBreakerThreshold: 5,
+			CircuitBreakerTimeout:   30,
 		},
 	}
 
@@ -78,28 +59,19 @@ func NewClientProviderWithConfig(config *Config) (*DefaultClientProvider, error)
 	}, nil
 }
 
-// GetFraudClient implements ClientProvider.GetFraudClient
-func (p *DefaultClientProvider) GetFraudClient() (fraudservice.FraudService, error) {
+// GetAntifraudClient implements ClientProvider.GetAntifraudClient
+func (p *DefaultClientProvider) GetAntifraudClient() (antifraudservice.AntifraudService, error) {
 	if err := p.ensureInitialized(); err != nil {
 		return nil, err
 	}
-	return p.fraudClient, nil
-}
-
-// GetPaymentClient implements ClientProvider.GetPaymentClient
-func (p *DefaultClientProvider) GetPaymentClient() (paymentservice.PaymentService, error) {
-	if err := p.ensureInitialized(); err != nil {
-		return nil, err
-	}
-	return p.paymentClient, nil
+	return p.antifraudClient, nil
 }
 
 // Close implements ClientProvider.Close
 func (p *DefaultClientProvider) Close() error {
 	// In a real implementation, this would close HTTP clients, database connections, etc.
 	p.initialized = false
-	p.fraudClient = nil
-	p.paymentClient = nil
+	p.antifraudClient = nil
 	return nil
 }
 
@@ -109,19 +81,12 @@ func (p *DefaultClientProvider) ensureInitialized() error {
 		return nil
 	}
 
-	// Initialize fraud client
-	fraudClient, err := fraud.NewFraudClientWithConfig(&p.config.Fraud)
+	// Initialize antifraud client
+	antifraudClient, err := antifraud.NewClient(p.config.Antifraud)
 	if err != nil {
-		return fmt.Errorf("failed to initialize fraud client: %w", err)
+		return fmt.Errorf("failed to initialize antifraud client: %w", err)
 	}
-	p.fraudClient = fraudClient
-
-	// Initialize payment client
-	paymentClient, err := payment.NewPaymentClientWithConfig(&p.config.Payment)
-	if err != nil {
-		return fmt.Errorf("failed to initialize payment client: %w", err)
-	}
-	p.paymentClient = paymentClient
+	p.antifraudClient = antifraudClient
 
 	p.initialized = true
 	return nil
@@ -129,48 +94,24 @@ func (p *DefaultClientProvider) ensureInitialized() error {
 
 // MockClientProvider implements ClientProvider with mock implementations for testing
 type MockClientProvider struct {
-	FraudClient   fraudservice.FraudService
-	PaymentClient paymentservice.PaymentService
+	AntifraudClient antifraudservice.AntifraudService
 }
 
-// GetFraudClient implements ClientProvider.GetFraudClient
-func (m *MockClientProvider) GetFraudClient() (fraudservice.FraudService, error) {
-	if m.FraudClient == nil {
-		// Create a default mock fraud client
-		config := &fraud.Config{
-			EnableMock: true,
-			MockResponses: fraud.MockConfig{
-				DefaultRiskScore: 30,
-				DefaultAction:    "allow",
-			},
+// GetAntifraudClient implements ClientProvider.GetAntifraudClient
+func (m *MockClientProvider) GetAntifraudClient() (antifraudservice.AntifraudService, error) {
+	if m.AntifraudClient == nil {
+		// Create a default mock antifraud client
+		config := &models.ClientConfig{
+			Enabled:               true,
+			CircuitBreakerEnabled: false,
 		}
-		client, err := fraud.NewFraudClientWithConfig(config)
+		client, err := antifraud.NewClient(*config)
 		if err != nil {
 			return nil, err
 		}
-		m.FraudClient = client
+		m.AntifraudClient = client
 	}
-	return m.FraudClient, nil
-}
-
-// GetPaymentClient implements ClientProvider.GetPaymentClient
-func (m *MockClientProvider) GetPaymentClient() (paymentservice.PaymentService, error) {
-	if m.PaymentClient == nil {
-		// Create a default mock payment client
-		config := &payment.Config{
-			EnableMock: true,
-			MockResponses: payment.MockConfig{
-				DefaultStatus: "completed",
-				SuccessRate:   1.0,
-			},
-		}
-		client, err := payment.NewPaymentClientWithConfig(config)
-		if err != nil {
-			return nil, err
-		}
-		m.PaymentClient = client
-	}
-	return m.PaymentClient, nil
+	return m.AntifraudClient, nil
 }
 
 // Close implements ClientProvider.Close

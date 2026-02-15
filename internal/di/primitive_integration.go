@@ -56,6 +56,16 @@ func (p *PrimitiveProvider) DB() primitive.DatabaseService {
 	return instance.(primitive.DatabaseService)
 }
 
+// Antifraud returns the antifraud service
+func (p *PrimitiveProvider) Antifraud() primitive.AntifraudService {
+	instance, err := p.container.Resolve((*primitive.AntifraudService)(nil))
+	if err != nil {
+		// Fall back to global primitive if not registered
+		return primitive.Default.Antifraud
+	}
+	return instance.(primitive.AntifraudService)
+}
+
 // RegisterPrimitiveServices registers all primitive services with the container
 func RegisterPrimitiveServices(container Container, config *primitive.Config) error {
 	// Register storage service
@@ -85,6 +95,14 @@ func RegisterPrimitiveServices(container Container, config *primitive.Config) er
 	// Register DB service (if available)
 	err = container.RegisterFactory((*primitive.DatabaseService)(nil), func(c Container) (interface{}, error) {
 		return primitive.Default.DB, nil
+	}, Singleton)
+	if err != nil {
+		return err
+	}
+
+	// Register antifraud service
+	err = container.RegisterFactory((*primitive.AntifraudService)(nil), func(c Container) (interface{}, error) {
+		return primitive.Default.Antifraud, nil
 	}, Singleton)
 	if err != nil {
 		return err
