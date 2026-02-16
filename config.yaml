@@ -1,0 +1,59 @@
+# Unified Workflow Configuration
+# This file contains all configuration options for the unified workflow system
+
+server:
+  port: 8080
+
+queue:
+  type: "in-memory"  # Options: "in-memory", "nats"
+  nats:
+    urls:
+      - "nats://localhost:4222"
+    stream_name: "workflow-execution"
+    subject_prefix: "workflow"
+    durable_name: "workflow-consumer"
+    max_reconnects: 5
+    reconnect_wait: 2s
+    connect_timeout: 5s
+
+executor:
+  worker_count: 5
+  queue_poll_interval: 1s
+  max_retries: 3
+  retry_delay: 5s
+  execution_timeout: 5m
+  step_timeout: 30s
+  enable_metrics: true
+  enable_tracing: false
+  max_concurrent_workflows: 10
+
+logging:
+  level: "info"  # Options: "debug", "info", "warn", "error"
+  format: "json"  # Options: "json", "text"
+
+dependency_injection:
+  pool_size: 1000
+  enable_metrics: true
+  pre_allocate_pools: true
+  max_concurrent_resolutions: 10000
+  default_lifecycle: "singleton"  # Options: "singleton", "transient", "scoped", "pooled"
+
+services:
+  registry:
+    url: "http://registry-service:8080"
+
+clients:
+  antifraud:
+    api_key: ""  # Set your antifraud API key here
+    host: "https://api.antifraudservice.com/v1"
+    timeout: 30
+    enabled: false
+    max_retries: 3
+    circuit_breaker_enabled: true
+    circuit_breaker_threshold: 5
+    circuit_breaker_timeout: 60
+  sdk:
+    workflow_api_endpoint: "http://localhost:8080"
+
+primitives:
+  echo_enabled: true

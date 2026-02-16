@@ -72,13 +72,13 @@ func main() {
 func initializeContainer(cfg *config.Config) (di.Container, error) {
 	// Create high-performance container for 5000+ TPS
 	diConfig := di.DefaultConfig()
-	diConfig.PoolSize = 1000
-	diConfig.EnableMetrics = true
+	diConfig.PoolSize = cfg.DependencyInjection.PoolSize
+	diConfig.EnableMetrics = cfg.DependencyInjection.EnableMetrics
 	container := di.NewWithConfig(diConfig)
 
 	// Initialize global primitives
 	primitiveConfig := &primitive.Config{
-		EchoEnabled: true,
+		EchoEnabled: cfg.Primitives.EchoEnabled,
 	}
 
 	if err := primitive.Init(primitiveConfig); err != nil {

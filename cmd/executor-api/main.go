@@ -175,13 +175,13 @@ func main() {
 func initializeContainer(cfg *config.Config) (di.Container, error) {
 	// Create high-performance container for 5000+ TPS
 	diConfig := di.DefaultConfig()
-	diConfig.PoolSize = 1000
-	diConfig.EnableMetrics = true
+	diConfig.PoolSize = cfg.DependencyInjection.PoolSize
+	diConfig.EnableMetrics = cfg.DependencyInjection.EnableMetrics
 	container := di.NewWithConfig(diConfig)
 
 	// Initialize global primitives
 	primitiveConfig := &primitive.Config{
-		EchoEnabled: true,
+		EchoEnabled: cfg.Primitives.EchoEnabled,
 	}
 
 	if err := primitive.Init(primitiveConfig); err != nil {
@@ -226,8 +226,8 @@ func initializeContainer(cfg *config.Config) (di.Container, error) {
 func registerCoreServices(container di.Container, cfg *config.Config) error {
 	// Register registry service - use HTTP registry to connect to the actual registry service
 	err := container.RegisterFactory((*registry.Registry)(nil), func(c di.Container) (interface{}, error) {
-		// Get registry service URL from environment variable
-		registryURL := getEnv("REGISTRY_SERVICE_URL", "http://registry-service:8080")
+		// Get registry service URL from config
+		registryURL := cfg.Services.Registry.URL
 		log.Printf("Creating HTTP registry client for endpoint: %s", registryURL)
 		return registry.NewHTTPRegistry(registryURL)
 	}, di.Singleton)

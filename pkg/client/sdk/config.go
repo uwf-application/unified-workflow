@@ -1,7 +1,12 @@
 package sdk
 
 import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"time"
+	"unified-workflow/internal/config"
 )
 
 // SDKConfig represents the configuration for the Workflow SDK client
@@ -106,6 +111,77 @@ func DefaultConfig() SDKConfig {
 		EnableMetrics:           true,
 		DefaultValidationRules:  []ValidationRule{},
 		CustomValidators:        []string{},
+	}
+}
+
+// NewConfigFromAppConfig creates SDK configuration from the main application config
+func NewConfigFromAppConfig(appConfig interface{}) SDKConfig {
+	// Try to cast to the main config type
+	if cfg, ok := appConfig.(*config.Config); ok {
+		return SDKConfig{
+			WorkflowAPIEndpoint:     cfg.Clients.SDK.WorkflowAPIEndpoint,
+			Timeout:                 30 * time.Second,
+			MaxRetries:              3,
+			RetryDelay:              1 * time.Second,
+			AuthType:                AuthTypeBearerToken,
+			EnableValidation:        true,
+			EnableSanitization:      true,
+			StrictValidation:        false,
+			EnableSessionExtraction: true,
+			EnableSecurityContext:   true,
+			IncludeFullHTTPContext:  true,
+			LogLevel:                LogLevelInfo,
+			EnableRequestLogging:    true,
+			EnableMetrics:           true,
+			DefaultValidationRules:  []ValidationRule{},
+			CustomValidators:        []string{},
+		}
+	}
+
+	// Fall back to default config
+	return DefaultConfig()
+}
+
+// LoadSDKConfig loads SDK configuration from the main config file
+func LoadSDKConfig() (SDKConfig, error) {
+	// Load the main application config
+	appConfig, err := config.LoadConfig()
+	if err != nil {
+		return DefaultConfig(), fmt.Errorf("failed to load application config: %w", err)
+	}
+
+	// Create SDK config from app config
+	sdkConfig := NewConfigFromAppConfig(appConfig)
+
+	// Apply environment variable overrides for SDK-specific settings
+	applySDKEnvOverrides(&sdkConfig)
+
+	return sdkConfig, nil
+}
+
+// applySDKEnvOverrides applies environment variable overrides to SDK configuration
+func applySDKEnvOverrides(sdkConfig *SDKConfig) {
+	if val := os.Getenv("SDK_WORKFLOW_API_ENDPOINT"); val != "" {
+		sdkConfig.WorkflowAPIEndpoint = val
+	}
+	if val := os.Getenv("SDK_TIMEOUT"); val != "" {
+		if timeout, err := strconv.Atoi(val); err == nil {
+			sdkConfig.Timeout = time.Duration(timeout) * time.Second
+		}
+	}
+	if val := os.Getenv("SDK_MAX_RETRIES"); val != "" {
+		if retries, err := strconv.Atoi(val); err == nil {
+			sdkConfig.MaxRetries = retries
+		}
+	}
+	if val := os.Getenv("SDK_AUTH_TOKEN"); val != "" {
+		sdkConfig.AuthToken = val
+	}
+	if val := os.Getenv("SDK_ENABLE_VALIDATION"); val != "" {
+		sdkConfig.EnableValidation = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("SDK_LOG_LEVEL"); val != "" {
+		sdkConfig.LogLevel = LogLevel(val)
 	}
 }
 

@@ -9,40 +9,39 @@ import (
 
 // Example demonstrates how to use the Workflow SDK
 func Example() {
-	// Create SDK configuration
-	config := &SDKConfig{
-		WorkflowAPIEndpoint: "http://localhost:8080",
-		Timeout:             30 * time.Second,
-		MaxRetries:          3,
-		RetryDelay:          1 * time.Second,
-		AuthToken:           "your-auth-token",
-		EnableValidation:    true,
-		EnableSanitization:  true,
-		StrictValidation:    false,
-		DefaultValidationRules: []ValidationRule{
-			{
-				Field:     "user_id",
-				Required:  true,
-				RuleType:  ValidationRuleTypeString,
-				MinLength: &[]int{1}[0],
-				MaxLength: &[]int{255}[0],
-			},
-			{
-				Field:    "amount",
-				Required: true,
-				RuleType: ValidationRuleTypeNumber,
-				MinValue: &[]float64{0.01}[0],
-			},
-			{
-				Field:    "email",
-				Required: false,
-				RuleType: ValidationRuleTypeEmail,
-			},
+	// Load SDK configuration from config file
+	sdkConfig, err := LoadSDKConfig()
+	if err != nil {
+		fmt.Printf("Failed to load SDK configuration: %v\n", err)
+		fmt.Printf("Falling back to default configuration\n")
+		sdkConfig = DefaultConfig()
+	}
+
+	// You can customize the config further if needed
+	sdkConfig.AuthToken = "your-auth-token" // Set your auth token
+	sdkConfig.DefaultValidationRules = []ValidationRule{
+		{
+			Field:     "user_id",
+			Required:  true,
+			RuleType:  ValidationRuleTypeString,
+			MinLength: &[]int{1}[0],
+			MaxLength: &[]int{255}[0],
+		},
+		{
+			Field:    "amount",
+			Required: true,
+			RuleType: ValidationRuleTypeNumber,
+			MinValue: &[]float64{0.01}[0],
+		},
+		{
+			Field:    "email",
+			Required: false,
+			RuleType: ValidationRuleTypeEmail,
 		},
 	}
 
 	// Create SDK client
-	client, err := NewClient(config)
+	client, err := NewClient(&sdkConfig)
 	if err != nil {
 		fmt.Printf("Failed to create SDK client: %v\n", err)
 		return
@@ -270,18 +269,19 @@ func ExampleHTTPHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Create SDK configuration
-		config := &SDKConfig{
-			WorkflowAPIEndpoint: "http://localhost:8080",
-			Timeout:             30 * time.Second,
-			MaxRetries:          3,
-			AuthToken:           "your-auth-token",
-			EnableValidation:    true,
-			EnableSanitization:  true,
+		// Load SDK configuration from config file
+		sdkConfig, err := LoadSDKConfig()
+		if err != nil {
+			// Log error but continue with default config
+			fmt.Printf("Failed to load SDK configuration: %v\n", err)
+			sdkConfig = DefaultConfig()
 		}
 
+		// Set auth token (could also come from config or environment)
+		sdkConfig.AuthToken = "your-auth-token" // In production, get from secure source
+
 		// Create SDK client
-		client, err := NewClient(config)
+		client, err := NewClient(&sdkConfig)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create SDK client: %v", err), http.StatusInternalServerError)
 			return

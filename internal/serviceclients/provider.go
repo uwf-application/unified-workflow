@@ -33,10 +33,10 @@ type DefaultClientProvider struct {
 func NewClientProvider() (*DefaultClientProvider, error) {
 	config := &Config{
 		Antifraud: models.ClientConfig{
-			APIKey:                  "demo_antifraud_api_key",
+			APIKey:                  "",
 			Host:                    "https://api.antifraudservice.com/v1",
 			Timeout:                 30,
-			Enabled:                 true,
+			Enabled:                 false,
 			MaxRetries:              3,
 			CircuitBreakerEnabled:   true,
 			CircuitBreakerThreshold: 5,
