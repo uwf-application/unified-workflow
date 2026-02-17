@@ -17,7 +17,12 @@ This document outlines the release strategy for all Unified Workflow components.
    - Binary: executor-service
    - Source: cmd/executor-api/
 
-3. Worker Service
+3. Workflow API Service (port 8082)
+   - Dockerfile: Dockerfile.workflow-api
+   - Binary: workflow-api
+   - Source: cmd/workflow-api/
+
+4. Worker Service
    - Dockerfile: Dockerfile.worker
    - Binary: workflow-worker
    - Source: cmd/workflow-worker/
@@ -197,6 +202,16 @@ jobs:
             ${{ secrets.REGISTRY_URL }}/uwf-worker:${{ github.ref_name }}
             ${{ secrets.REGISTRY_URL }}/uwf-worker:latest
       
+      - name: Build and push Workflow API Service
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.workflow-api
+          push: true
+          tags: |
+            ${{ secrets.REGISTRY_URL }}/uwf-workflow-api:${{ github.ref_name }}
+            ${{ secrets.REGISTRY_URL }}/uwf-workflow-api:latest
+      
       - name: Create Release Bundle
         run: |
           mkdir -p release-bundle
@@ -229,6 +244,7 @@ PATCH: Bug fixes (backward compatible)
 All components share the same version number:
 - Registry Service: v1.0.0
 - Executor Service: v1.0.0
+- Workflow API Service: v1.0.0
 - Worker Service: v1.0.0
 - SDK: v1.0.0
 
@@ -269,6 +285,7 @@ Benefits:
 # Images:
 # - uwf-application/registry
 # - uwf-application/executor
+# - uwf-application/workflow-api
 # - uwf-application/worker
 ```
 
@@ -278,6 +295,7 @@ Benefits:
 # Images:
 # - registry.docker.aws.com/uwf/registry
 # - registry.docker.aws.com/uwf/executor
+# - registry.docker.aws.com/uwf/workflow-api
 # - registry.docker.aws.com/uwf/worker
 ```
 
@@ -287,6 +305,7 @@ Benefits:
 # Images:
 # - gcr.io/unified-workflow/registry
 # - gcr.io/unified-workflow/executor
+# - gcr.io/unified-workflow/workflow-api
 # - gcr.io/unified-workflow/worker
 ```
 
@@ -314,6 +333,7 @@ helm install unified-workflow ./charts/unified-workflow \
 # Configure and run services
 ./registry-service --config config.yaml
 ./executor-service --config config.yaml
+./workflow-api --config config.yaml
 ./workflow-worker --config config.yaml
 ```
 
@@ -323,6 +343,7 @@ helm install unified-workflow ./charts/unified-workflow \
 1. **Docker Images**
    - uwf-registry:v1.0.0
    - uwf-executor:v1.0.0
+   - uwf-workflow-api:v1.0.0
    - uwf-worker:v1.0.0
 
 2. **Configuration Files**

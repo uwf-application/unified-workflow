@@ -70,6 +70,16 @@ else
     exit 1
 fi
 
+# Build workflow-api binary
+echo "Building workflow-api binary..."
+if go build -o "$BIN_DIR/workflow-api" ./cmd/workflow-api; then
+    print_success "Built workflow-api binary: $BIN_DIR/workflow-api"
+    ls -lh "$BIN_DIR/workflow-api"
+else
+    print_error "Failed to build workflow-api binary"
+    exit 1
+fi
+
 # Create binaries archive
 echo ""
 echo "Creating binaries archive..."
@@ -95,6 +105,7 @@ echo "Binaries location: $BIN_DIR/"
 echo "  - registry-service"
 echo "  - executor-service"
 echo "  - workflow-worker"
+echo "  - workflow-api"
 echo ""
 echo "Archive: dist/unified-workflow-binaries-${VERSION}.tar.gz"
 echo "Checksum: dist/unified-workflow-binaries-${VERSION}.sha256"

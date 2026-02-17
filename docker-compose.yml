@@ -61,6 +61,37 @@ services:
       - unified-workflow-network
 
 
+  # Workflow API Service
+  workflow-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.workflow-api
+    container_name: unified-workflow-api
+    ports:
+      - "8082:8082"
+    environment:
+      - SERVER_PORT=8082
+      - REGISTRY_SERVICE_URL=http://registry-service:8080
+      - EXECUTOR_SERVICE_URL=http://executor-service:8081
+      - NATS_URL=nats://nats:4222
+      - LOG_LEVEL=info
+    depends_on:
+      registry-service:
+        condition: service_healthy
+      executor-service:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - unified-workflow-network
+
+
   # Worker Service
   worker-service:
     build:
@@ -90,6 +121,8 @@ services:
         condition: service_healthy
       executor-service:
         condition: service_healthy
+      workflow-api:
+        condition: service_healthy
     networks:
       - unified-workflow-network
     command: >
@@ -101,6 +134,9 @@ services:
       echo '' &&
       echo 'Testing Executor Service...' &&
       curl -f http://executor-service:8081/health &&
+      echo '' &&
+      echo 'Testing Workflow API Service...' &&
+      curl -f http://workflow-api:8082/health &&
       echo '' &&
       echo 'All services are healthy!' &&
       echo '' &&
@@ -117,6 +153,9 @@ services:
       curl -X POST http://executor-service:8081/api/v1/execute \
         -H 'Content-Type: application/json' \
         -d '{\"workflow_id\":\"test-workflow-1\",\"input_data\":{\"test\":\"data\"}}' &&
+      echo '' &&
+      echo '4. Testing Workflow API endpoints...' &&
+      curl -f http://workflow-api:8082/api/v1/workflows &&
       echo '' &&
       echo 'Workflow lifecycle test completed!' &&
       tail -f /dev/null

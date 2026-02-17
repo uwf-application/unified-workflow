@@ -1,0 +1,40 @@
+# Workflow API Service Dockerfile
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY cmd/workflow-api/ ./cmd/workflow-api/
+COPY internal/ ./internal/
+COPY pkg/ ./pkg/
+COPY workflows/ ./workflows/
+
+# Build the application
+RUN cd cmd/workflow-api && \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /go/bin/workflow-api .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+# Copy the binary from builder
+COPY --from=builder /go/bin/workflow-api .
+
+# Expose port
+EXPOSE 8082
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8082/health || exit 1
+
+# Run the binary
+CMD ["./workflow-api"]

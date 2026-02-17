@@ -46,6 +46,8 @@ clients:
   antifraud:
     api_key: ""  # Set your antifraud API key here
     host: "https://api.antifraudservice.com/v1"
+    # af-test.qazpost.kz
+    # af-auth.qazpost.kz
     timeout: 30
     enabled: false
     max_retries: 3
