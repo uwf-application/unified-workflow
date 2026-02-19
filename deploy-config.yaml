@@ -1,0 +1,107 @@
+# Unified Workflow Deployment Configuration
+# This file configures the deployment of services to the test environment
+
+# Jump server configuration
+jump_server: "10.200.1.2"
+jump_username: "khassangali"
+
+# Harbor registry configuration
+harbor_registry: "172.30.75.78:9080"
+harbor_username: "zh.akhmetkarimov"
+
+# Environment
+environment: "test"
+
+# Services configuration
+services:
+  workflow-worker:
+    name: "workflow-worker"
+    dockerfile: "Dockerfile.worker"
+    build_dir: "."
+    registry: "172.30.75.78:9080/taf/workflow-worker"
+    target_host: "172.30.75.85"
+    compose_path: "/opt/workflow/docker-compose.yml"
+    username: "zh.akhmetkarimov"
+    
+  workflow-registry:
+    name: "workflow-registry"
+    dockerfile: "Dockerfile.registry"
+    build_dir: "."
+    registry: "172.30.75.78:9080/taf/workflow-registry"
+    target_host: "172.30.75.85"
+    compose_path: "/opt/workflow/docker-compose.yml"
+    username: "zh.akhmetkarimov"
+    
+  workflow-executor:
+    name: "workflow-executor"
+    dockerfile: "Dockerfile.executor"
+    build_dir: "."
+    registry: "172.30.75.78:9080/taf/workflow-executor"
+    target_host: "172.30.75.85"
+    compose_path: "/opt/workflow/docker-compose.yml"
+    username: "zh.akhmetkarimov"
+    
+  workflow-api:
+    name: "workflow-api"
+    dockerfile: "Dockerfile.workflow-api"
+    build_dir: "."
+    registry: "172.30.75.78:9080/taf/workflow-api"
+    target_host: "172.30.75.85"
+    compose_path: "/opt/workflow/docker-compose.yml"
+    username: "zh.akhmetkarimov"
+
+# Deployment strategies
+deployment_strategies:
+  full: "Build and push all services"
+  incremental: "Build and push only changed services"
+  single: "Build and push a single service"
+
+# SSH configuration
+ssh:
+  private_key_path: "~/.ssh/id_rsa"
+  timeout_seconds: 30
+  retry_attempts: 3
+
+# Build configuration
+build:
+  cache: true
+  no_cache: false
+  pull: true
+  build_args: {}
+
+# Push configuration
+push:
+  retry_on_failure: true
+  max_retries: 3
+  timeout_minutes: 10
+
+# Verification configuration
+verification:
+  health_check_timeout: 60
+  health_check_interval: 5
+  max_health_check_attempts: 12
+
+# Logging configuration
+logging:
+  level: "info"
+  file: "deploy.log"
+  max_size_mb: 10
+  max_backups: 5
+
+# Notification configuration (optional)
+notifications:
+  slack:
+    enabled: false
+    webhook_url: ""
+    channel: "#deployments"
+  email:
+    enabled: false
+    smtp_server: ""
+    from_address: ""
+    to_addresses: []
+
+# Rollback configuration
+rollback:
+  enabled: true
+  keep_versions: 5
+  auto_rollback_on_failure: true
