@@ -11,7 +11,22 @@
 
     <name>Unified Workflow SDK</name>
     <description>Java 21 client SDK for the Unified Workflow System</description>
-    <url>https://github.com/unifiedworkflow/unified-workflow-go</url>
+    <url>https://github.com/uwf-application/unified-workflow</url>
+
+    <scm>
+        <connection>scm:git:git://github.com/uwf-application/unified-workflow.git</connection>
+        <developerConnection>scm:git:ssh://github.com/uwf-application/unified-workflow.git</developerConnection>
+        <url>https://github.com/uwf-application/unified-workflow</url>
+    </scm>
+
+    <!-- Publish to GitHub Packages so clients can pull it as a Maven dependency -->
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/uwf-application/unified-workflow</url>
+        </repository>
+    </distributionManagement>
 
     <properties>
         <java.version>21</java.version>
@@ -95,9 +110,6 @@
                 <version>3.6.3</version>
                 <configuration>
                     <release>21</release>
-                    <additionalJOptions>
-                        <additionalJOption>--enable-preview</additionalJOption>
-                    </additionalJOptions>
                 </configuration>
                 <executions>
                     <execution>
