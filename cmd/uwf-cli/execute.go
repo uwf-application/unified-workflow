@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -44,11 +48,8 @@ func runExecuteSyncCmd(cmd *cobra.Command, args []string) error {
 	inputFile, _ := cmd.Flags().GetString("input-file")
 	timeout, _ := cmd.Flags().GetInt("timeout")
 	output, _ := cmd.Flags().GetString("output")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 
-	fmt.Printf("Executing workflow %s synchronously\n", workflowID)
-	fmt.Printf("Timeout: %d seconds\n", timeout)
-
-	// Parse input data
 	var inputData map[string]interface{}
 	if inputFile != "" {
 		data, err := os.ReadFile(inputFile)
@@ -69,25 +70,75 @@ func runExecuteSyncCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Simulate response
-	response := map[string]interface{}{
-		"run_id":      fmt.Sprintf("run-sync-%d", os.Getpid()),
-		"workflow_id": workflowID,
-		"status":      "completed",
-		"message":     "Workflow executed synchronously",
-		"result": map[string]interface{}{
-			"success":           true,
-			"execution_time_ms": 1250,
-			"steps_executed":    1,
-			"output_data": map[string]interface{}{
-				"processed": true,
-				"timestamp": time.Now().Format(time.RFC3339),
-			},
-		},
+	body, err := json.Marshal(map[string]interface{}{
 		"input_data": inputData,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
-	return printOutput(response, output)
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	url := fmt.Sprintf("%s/api/v1/workflows/%s/execute", endpoint, workflowID)
+	resp, err := httpClient.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to execute workflow: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var execResponse map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&execResponse); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	runID := ""
+	if v, ok := execResponse["run_id"]; ok {
+		runID, _ = v.(string)
+	} else if v, ok := execResponse["runId"]; ok {
+		runID, _ = v.(string)
+	}
+
+	if runID == "" {
+		return printOutput(execResponse, output)
+	}
+
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+	var lastResponse map[string]interface{}
+	lastResponse = execResponse
+
+	for time.Now().Before(deadline) {
+		time.Sleep(1 * time.Second)
+
+		pollURL := fmt.Sprintf("%s/api/v1/executions/%s", endpoint, runID)
+		pollResp, err := httpClient.Get(pollURL)
+		if err != nil {
+			return fmt.Errorf("failed to poll execution status: %v", err)
+		}
+
+		var pollData map[string]interface{}
+		decodeErr := json.NewDecoder(pollResp.Body).Decode(&pollData)
+		pollResp.Body.Close()
+
+		if decodeErr != nil {
+			return fmt.Errorf("failed to decode poll response: %v", decodeErr)
+		}
+
+		lastResponse = pollData
+
+		if status, ok := pollData["status"].(string); ok {
+			if status == "completed" || status == "failed" || status == "cancelled" {
+				return printOutput(lastResponse, output)
+			}
+		}
+	}
+
+	lastResponse["_warning"] = fmt.Sprintf("timeout of %d seconds elapsed; showing last known status", timeout)
+	return printOutput(lastResponse, output)
 }
 
 func newExecuteAsyncCmd() *cobra.Command {
@@ -115,16 +166,8 @@ func runExecuteAsyncCmd(cmd *cobra.Command, args []string) error {
 	callbackURL, _ := cmd.Flags().GetString("callback-url")
 	wait, _ := cmd.Flags().GetBool("wait")
 	output, _ := cmd.Flags().GetString("output")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 
-	fmt.Printf("Executing workflow %s asynchronously\n", workflowID)
-	if callbackURL != "" {
-		fmt.Printf("Callback URL: %s\n", callbackURL)
-	}
-	if wait {
-		fmt.Println("Waiting for completion...")
-	}
-
-	// Parse input data
 	var inputData map[string]interface{}
 	if inputFile != "" {
 		data, err := os.ReadFile(inputFile)
@@ -146,41 +189,81 @@ func runExecuteAsyncCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	runID := fmt.Sprintf("run-async-%d-%d", os.Getpid(), time.Now().Unix())
-
-	// Simulate response
-	response := map[string]interface{}{
-		"run_id":                  runID,
-		"workflow_id":             workflowID,
-		"status":                  "queued",
-		"message":                 "Workflow execution queued",
-		"status_url":              fmt.Sprintf("/api/v1/executions/%s", runID),
-		"result_url":              fmt.Sprintf("/api/v1/executions/%s/result", runID),
-		"poll_after_ms":           1000,
-		"estimated_completion_ms": 5000,
-		"expires_at":              time.Now().Add(1 * time.Hour).Format(time.RFC3339),
-		"input_data":              inputData,
-		"metadata": map[string]interface{}{
-			"timeout_ms":          timeout,
-			"callback_url":        callbackURL,
-			"wait_for_completion": wait,
-			"submitted_at":        time.Now().Format(time.RFC3339),
-		},
+	payload := map[string]interface{}{
+		"input_data":   inputData,
+		"callback_url": callbackURL,
+		"timeout_ms":   timeout,
 	}
 
-	if wait {
-		// Simulate waiting for completion
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %v", err)
+	}
+
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	url := fmt.Sprintf("%s/api/v1/workflows/%s/execute", endpoint, workflowID)
+	resp, err := httpClient.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to execute workflow: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var execResponse map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&execResponse); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	if !wait {
+		return printOutput(execResponse, output)
+	}
+
+	runID := ""
+	if v, ok := execResponse["run_id"]; ok {
+		runID, _ = v.(string)
+	} else if v, ok := execResponse["runId"]; ok {
+		runID, _ = v.(string)
+	}
+
+	if runID == "" {
+		return printOutput(execResponse, output)
+	}
+
+	deadline := time.Now().Add(time.Duration(timeout) * time.Millisecond)
+	lastResponse := execResponse
+
+	for time.Now().Before(deadline) {
 		time.Sleep(2 * time.Second)
-		response["status"] = "completed"
-		response["message"] = "Workflow execution completed"
-		response["result"] = map[string]interface{}{
-			"success":           true,
-			"execution_time_ms": 2150,
-			"steps_executed":    1,
+
+		pollURL := fmt.Sprintf("%s/api/v1/executions/%s", endpoint, runID)
+		pollResp, err := httpClient.Get(pollURL)
+		if err != nil {
+			return fmt.Errorf("failed to poll execution status: %v", err)
+		}
+
+		var pollData map[string]interface{}
+		decodeErr := json.NewDecoder(pollResp.Body).Decode(&pollData)
+		pollResp.Body.Close()
+
+		if decodeErr != nil {
+			return fmt.Errorf("failed to decode poll response: %v", decodeErr)
+		}
+
+		lastResponse = pollData
+
+		if status, ok := pollData["status"].(string); ok {
+			if status == "completed" || status == "failed" || status == "cancelled" {
+				return printOutput(lastResponse, output)
+			}
 		}
 	}
 
-	return printOutput(response, output)
+	return printOutput(lastResponse, output)
 }
 
 func newExecuteBulkCmd() *cobra.Command {
@@ -198,50 +281,123 @@ func newExecuteBulkCmd() *cobra.Command {
 	return cmd
 }
 
+type bulkEntry struct {
+	WorkflowID string                 `json:"workflow_id"`
+	InputData  map[string]interface{} `json:"input_data"`
+}
+
+type bulkResult struct {
+	WorkflowID string `json:"workflow_id"`
+	RunID      string `json:"run_id,omitempty"`
+	Status     string `json:"status"`
+	Error      string `json:"error,omitempty"`
+}
+
 func runExecuteBulkCmd(cmd *cobra.Command, args []string) error {
 	filename := args[0]
 	parallel, _ := cmd.Flags().GetBool("parallel")
 	concurrency, _ := cmd.Flags().GetInt("concurrency")
-	async, _ := cmd.Flags().GetBool("async")
 	output, _ := cmd.Flags().GetString("output")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 
-	fmt.Printf("Bulk executing workflows from: %s\n", filename)
-	fmt.Printf("Parallel: %v, Concurrency: %d, Async: %v\n", parallel, concurrency, async)
-
-	// Simulate response
-	response := map[string]interface{}{
-		"message":        "Bulk execution completed",
-		"filename":       filename,
-		"total_count":    10,
-		"success_count":  8,
-		"failed_count":   2,
-		"execution_mode": map[string]interface{}{"parallel": parallel, "concurrency": concurrency, "async": async},
-		"execution_ids": []string{
-			"run-bulk-1",
-			"run-bulk-2",
-			"run-bulk-3",
-			"run-bulk-4",
-			"run-bulk-5",
-			"run-bulk-6",
-			"run-bulk-7",
-			"run-bulk-8",
-		},
-		"failed_executions": []map[string]interface{}{
-			{
-				"workflow_id": "workflow-9",
-				"error":       "Workflow not found",
-			},
-			{
-				"workflow_id": "workflow-10",
-				"error":       "Timeout exceeded",
-			},
-		},
-		"summary": map[string]interface{}{
-			"total_time_ms":   12500,
-			"average_time_ms": 1562,
-			"success_rate":    0.8,
-		},
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("failed to read bulk file: %v", err)
 	}
 
-	return printOutput(response, output)
+	var entries []bulkEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("failed to parse bulk file JSON: %v", err)
+	}
+
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	submitOne := func(entry bulkEntry) bulkResult {
+		body, err := json.Marshal(map[string]interface{}{
+			"input_data": entry.InputData,
+		})
+		if err != nil {
+			return bulkResult{WorkflowID: entry.WorkflowID, Status: "failed", Error: err.Error()}
+		}
+
+		url := fmt.Sprintf("%s/api/v1/workflows/%s/execute", endpoint, entry.WorkflowID)
+		resp, err := httpClient.Post(url, "application/json", bytes.NewReader(body))
+		if err != nil {
+			return bulkResult{WorkflowID: entry.WorkflowID, Status: "failed", Error: err.Error()}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
+			return bulkResult{
+				WorkflowID: entry.WorkflowID,
+				Status:     "failed",
+				Error:      fmt.Sprintf("API returned status %d", resp.StatusCode),
+			}
+		}
+
+		var execResponse map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&execResponse); err != nil {
+			return bulkResult{WorkflowID: entry.WorkflowID, Status: "failed", Error: err.Error()}
+		}
+
+		runID := ""
+		if v, ok := execResponse["run_id"]; ok {
+			runID, _ = v.(string)
+		} else if v, ok := execResponse["runId"]; ok {
+			runID, _ = v.(string)
+		}
+
+		status := "submitted"
+		if v, ok := execResponse["status"].(string); ok {
+			status = v
+		}
+
+		return bulkResult{WorkflowID: entry.WorkflowID, RunID: runID, Status: status}
+	}
+
+	results := make([]bulkResult, len(entries))
+
+	if parallel {
+		sem := make(chan struct{}, concurrency)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+
+		for idx, entry := range entries {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, e bulkEntry) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				r := submitOne(e)
+				mu.Lock()
+				results[i] = r
+				mu.Unlock()
+			}(idx, entry)
+		}
+		wg.Wait()
+	} else {
+		for i, entry := range entries {
+			results[i] = submitOne(entry)
+		}
+	}
+
+	submitted := 0
+	failed := 0
+	for _, r := range results {
+		if r.Error != "" {
+			failed++
+		} else {
+			submitted++
+		}
+	}
+
+	summary := map[string]interface{}{
+		"total":     len(entries),
+		"submitted": submitted,
+		"failed":    failed,
+		"results":   results,
+	}
+
+	return printOutput(summary, output)
 }

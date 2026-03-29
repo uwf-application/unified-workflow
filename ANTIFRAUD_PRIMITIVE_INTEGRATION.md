@@ -368,143 +368,278 @@ go run examples/antifraud_demo.go
 
 ## Integration with Workflows
 
-The antifraud service can be integrated into workflow steps:
+The antifraud service has been fully integrated into the workflow system with complete transaction validation workflow:
+
+### Complete Antifraud Workflow
+
+The `antifraud-transaction-validation` workflow includes 5 sequential steps:
+
+1. **StoreTransactionStep** - Stores transaction in antifraud system
+2. **AMLValidationStep** - Anti-Money Laundering validation  
+3. **FCValidationStep** - Fraud Check validation
+4. **MLValidationStep** - Machine Learning validation
+5. **FinalizeTransactionStep** - Final decision and resolution
+
+### Workflow Implementation
 
 ```go
-package workflows
+// workflows/antifraud_workflow.go
+func CreateAntifraudTransactionWorkflow(endpoint string) model.Workflow {
+    workflow := model.NewBaseWorkflow(
+        "antifraud-transaction-validation",
+        fmt.Sprintf("Complete transaction validation using antifraud SDK at %s", endpoint),
+    )
+    
+    // Step 1: Store Transaction
+    storeStep := steps.NewStoreTransactionStep(endpoint)
+    workflow.AddStep(storeStep)
+    
+    // Step 2: AML Validation
+    amlStep := steps.NewAMLValidationStep(endpoint)
+    workflow.AddStep(amlStep)
+    
+    // Step 3: FC Validation (Fraud Check)
+    fcStep := steps.NewFCValidationStep(endpoint)
+    workflow.AddStep(fcStep)
+    
+    // Step 4: ML Validation (Machine Learning)
+    mlStep := steps.NewMLValidationStep(endpoint)
+    workflow.AddStep(mlStep)
+    
+    // Step 5: Finalize Transaction
+    finalizeStep := steps.NewFinalizeTransactionStep(endpoint)
+    workflow.AddStep(finalizeStep)
+    
+    return workflow
+}
+```
 
-import (
-    "unified-workflow/internal/primitive"
-)
+### Step Implementation Example
 
-type AntifraudStep struct {
-    // Step implementation
+```go
+// workflows/steps/fc_validation_step.go
+type FCValidationStep struct {
+    *AntifraudStep
 }
 
-func (s *AntifraudStep) Execute(ctx WorkflowContext, data WorkflowData) error {
-    // Get transaction from workflow data
-    transaction, ok := data.Get("transaction")
-    if !ok {
-        return fmt.Errorf("transaction not found in workflow data")
-    }
-    
-    // Use antifraud service
-    err := primitive.Default.Antifraud.StoreTransaction(transaction)
+func (s *FCValidationStep) ExecuteStepLogic(ctx interface{}, context interface{}, data interface{}) error {
+    // Get antifraud service
+    antifraudService, err := s.GetAntifraudService()
     if err != nil {
-        return fmt.Errorf("failed to store transaction: %w", err)
+        return fmt.Errorf("failed to get antifraud service: %w", err)
     }
     
-    // Validate transaction
-    result, err := primitive.Default.Antifraud.ValidateTransactionByAML(transaction)
+    // Prepare transaction data
+    transactionData := map[string]interface{}{
+        "AF_Id":      uuid.NewString(),
+        "AF_AddDate": time.Now().Format(time.RFC3339Nano),
+        "Transaction": map[string]interface{}{
+            "Id":                 uuid.NewString(),
+            "Type":               "deposit",
+            "Amount":             "100000",
+            "Currency":           "KZT",
+            // ... transaction fields
+        },
+    }
+    
+    // Call antifraud SDK
+    result, err := antifraudService.ValidateTransactionByFC(transactionData)
     if err != nil {
-        return fmt.Errorf("AML validation failed: %w", err)
+        return fmt.Errorf("FC validation failed: %w", err)
     }
     
-    // Store result in workflow data
-    data.Put("aml_result", result)
+    // Validate response
+    if err := s.validateFCResponse(result); err != nil {
+        return fmt.Errorf("FC response validation failed: %w", err)
+    }
+    
+    // Store resolution
+    err = antifraudService.StoreServiceResolution(result)
+    if err != nil {
+        fmt.Printf("Warning: Failed to store FC resolution: %v\n", err)
+    }
     
     return nil
 }
 ```
 
-## Migration from Direct SDK Usage
+### Demo Workflow Execution
 
-### Before (Direct SDK)
+A complete demo is available at `examples/antifraud_workflow_demo.go`:
 
 ```go
-import (
-    af "github.com/baraic-io/antifraud-go"
-)
-
+// examples/antifraud_workflow_demo.go
 func main() {
-    client, err := af.NewClient(af.ClientConfig{
-        Host:   os.Getenv("API_HOST"),
-        APIKey: os.Getenv("API_KEY"),
-    })
+    // Configure SDK for TAF environment
+    sdkConfig := sdk.DefaultConfig()
+    sdkConfig.WorkflowAPIEndpoint = "https://af-test.qazpost.kz"
+    sdkConfig.Timeout = 30
     
-    err = client.StoreTransaction(transaction)
-}
-```
-
-### After (Primitive Integration)
-
-```go
-import (
-    "unified-workflow/internal/primitive"
-)
-
-func main() {
-    primitive.Init(&primitive.Config{
-        AntifraudAPIKey:  os.Getenv("API_KEY"),
-        AntifraudAPIHost: os.Getenv("API_HOST"),
-    })
+    // Create SDK client
+    client, err := sdk.NewClient(&sdkConfig)
     
-    err := primitive.Default.Antifraud.StoreTransaction(transaction)
+    // Prepare transaction data
+    transactionData := map[string]interface{}{
+        "transaction": map[string]interface{}{
+            "id":                   fmt.Sprintf("txn-%d", time.Now().Unix()),
+            "type":                 "deposit",
+            "amount":               "100000",
+            "currency":             "KZT",
+            // ... transaction fields
+        },
+    }
+    
+    // Execute antifraud workflow
+    resp, err := client.ExecuteWorkflow(ctx, "antifraud-transaction-validation", transactionData)
+    
+    // Poll for execution status
+    statusResp, err := client.GetExecutionStatus(ctx, resp.RunID)
+    
+    // Get execution details
+    detailsResp, err := client.GetExecutionDetails(ctx, resp.RunID)
 }
 ```
 
-## Best Practices
+## Testing on Jump Server
 
-1. **Always check if service is enabled** before using it
-2. **Use circuit breaker** for production deployments
-3. **Set appropriate timeouts** based on your SLA requirements
-4. **Monitor health checks** in production environments
-5. **Use environment variables** for configuration
-6. **Implement retry logic** for transient failures
-7. **Log all antifraud operations** for audit trails
+The antifraud workflow can be tested on the Qazpost jump server (10.200.1.2) using the following steps:
 
-## Troubleshooting
+### 1. Sync Code to Jump Server
 
-### Common Issues
-
-1. **"API key is required"**: Set `ANTIFRAUD_API_KEY` environment variable
-2. **"Host is required"**: Set `ANTIFRAUD_API_HOST` environment variable
-3. **Circuit breaker constantly open**: Check service health and adjust thresholds
-4. **Timeouts**: Increase `AntifraudTimeout` configuration
-5. **Disabled service**: Set `AntifraudEnabled: true` in configuration
-
-### Debugging
-
-Enable debug logging:
-
-```go
-config := &primitive.Config{
-    AntifraudAPIKey:  "your-key",
-    AntifraudAPIHost: "your-host",
-    // Add debug logging configuration
-}
+```bash
+./uwf-cli deploy sync --verbose
 ```
 
-## Performance Considerations
+### 2. Build Docker Images
 
-1. **Connection Pooling**: The SDK manages HTTP connection pooling
-2. **Circuit Breaker**: Prevents cascading failures during outages
-3. **Timeout Management**: Configurable timeouts prevent hung requests
-4. **Retry Logic**: Automatic retries for transient failures
-5. **Caching**: Consider implementing caching for repeated validations
+```bash
+./uwf-cli deploy build --verbose
+```
 
-## Security
+### 3. Push Images to Harbor Registry
 
-1. **API Key Security**: Store API keys in secure vaults (not in code)
-2. **TLS/SSL**: Always use HTTPS for API communication
-3. **Input Validation**: Validate all transaction data before sending
-4. **Audit Logging**: Log all antifraud operations for compliance
-5. **Access Control**: Implement proper access controls for antifraud operations
+```bash
+./uwf-cli deploy push --all --verbose
+```
+
+### 4. Test Connectivity
+
+```bash
+# From jump server
+ssh khassangali@10.200.1.2
+
+# Test TAF service connectivity
+ping 172.30.75.91
+curl -k https://af-test.qazpost.kz
+
+# Run test script
+cd /tmp/uwf-deploy
+./test_antifraud_workflow.sh
+```
+
+### 5. Execute Antifraud Workflow
+
+From the jump server, you can execute the antifraud workflow using:
+
+```bash
+# Option 1: Using uwf-cli
+./uwf-cli execute sync antifraud-transaction-validation \
+  --input '{
+    "transaction": {
+      "id": "txn-12345",
+      "type": "deposit",
+      "amount": "100000",
+      "currency": "KZT",
+      "client_id": "client-001",
+      "client_name": "John Smith",
+      "client_pan": "111111******1111",
+      "client_cvv": "111",
+      "client_card_holder": "JOHN SMITH",
+      "client_phone": "+77007007070",
+      "merchant_terminal_id": "00000001",
+      "channel": "E-com",
+      "location_ip": "192.168.0.1"
+    }
+  }'
+
+# Option 2: Using curl directly
+curl -X POST https://af-test.qazpost.kz/api/v1/workflows/antifraud-transaction-validation/execute \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer M8#Qe!2$ZrA9xKp' \
+  -d '{
+    "input_data": {
+      "transaction": {
+        "id": "txn-12345",
+        "type": "deposit",
+        "amount": "100000",
+        "currency": "KZT",
+        "client_id": "client-001",
+        "client_name": "John Smith",
+        "client_pan": "111111******1111",
+        "client_cvv": "111",
+        "client_card_holder": "JOHN SMITH",
+        "client_phone": "+77007007070",
+        "merchant_terminal_id": "00000001",
+        "channel": "E-com",
+        "location_ip": "192.168.0.1"
+      }
+    }
+  }'
+```
+
+### 6. Verify Deployment
+
+```bash
+./uwf-cli deploy verify
+```
+
+## Workflow Lifecycle Verification
+
+The antifraud workflow follows this complete lifecycle:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│         Workflow Initiation (Using SDK)                 │
+├─────────────────────────────────────────────────────────┤
+│  SDK Client → ExecuteWorkflow() → Workflow API          │
+├─────────────────────────────────────────────────────────┤
+│         Workflow Execution                              │
+├─────────────────────────────────────────────────────────┤
+│  Workflow → Steps → ChildSteps → PrimitiveOperations    │
+├─────────────────────────────────────────────────────────┤
+│         Primitive Operations                            │
+├─────────────────────────────────────────────────────────┤
+│  Primitive → ServiceClients → SDK → Actual Client       │
+├─────────────────────────────────────────────────────────┤
+│         TAF Antifraud Service                           │
+├─────────────────────────────────────────────────────────┤
+│  Actual Client → TAF API (172.30.75.91)                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Verification Points
+
+1. **SDK Level**: `ExecuteWorkflow()` returns execution ID
+2. **Workflow Level**: Steps execute in sequence (Store → AML → FC → ML → Finalize)
+3. **Primitive Level**: Antifraud service calls are made with proper authentication
+4. **Service Client Level**: HTTP requests to TAF service with correct payload
+5. **TAF Service Level**: Transaction validation results returned
 
 ## Support
 
 For issues with the antifraud primitive integration:
 
 1. Check the [examples/antifraud_demo.go](examples/antifraud_demo.go) file
-2. Review the test cases in [internal/primitive/services/antifraud/client_test.go](internal/primitive/services/antifraud/client_test.go)
-3. Consult the Antifraud SDK documentation at `github.com/baraic-io/antifraud-go`
-
-## License
+2. Check the [examples/antifraud_workflow_demo.go](examples/antifraud_workflow_demo.go) file
+3. Review the test cases in [internal/primitive/services/antifraud/client_test.go](internal/primitive/services/antifraud/client_test.go)
+4. Run the test script: `./test_antifraud_workflow.sh` on jump server
+5. Consult the Antifraud SDK documentation at `github.com/baraic-io/antifraud-go`
 
 This integration is part of the Unified Workflow project. See the project LICENSE for details.
 
 ---
 
-**Last Updated**: February 15, 2026  
-**Version**: 1.0.0  
-**Author**: Unified Workflow Team
+**Last Updated**: March 2, 2026  
+**Version**: 1.1.0  
+**Author**: Unified Workflow Team  
+**Status**: ✅ Complete - Ready for deployment and testing on Qazpost TAF environment

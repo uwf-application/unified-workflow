@@ -1,0 +1,56 @@
+# Unified Workflow SDK Configuration Example
+# Copy this file to sdk-config.yaml and customize as needed
+
+# Workflow API configuration
+workflow_api_endpoint: "http://localhost:8080"
+timeout: 30s
+max_retries: 3
+retry_delay: 1s
+
+# Authentication
+auth_token: "your-auth-token-here"
+auth_type: "bearer_token"  # Options: bearer_token, api_key, basic_auth, oauth2, aws_sigv4
+
+# Validation
+enable_validation: true
+enable_sanitization: true
+strict_validation: false
+
+# Context extraction
+enable_session_extraction: true
+enable_security_context: true
+include_full_http_context: true
+
+# Logging and monitoring
+log_level: "info"  # Options: debug, info, warn, error
+enable_request_logging: true
+enable_metrics: true
+
+# Default validation rules
+default_validation_rules:
+  - field: "user_id"
+    rule_type: "required"
+    required: true
+  - field: "email"
+    rule_type: "email"
+    required: true
+  - field: "amount"
+    rule_type: "number"
+    min_value: 0.01
+    max_value: 1000000
+
+# Custom validators (paths to custom validation functions)
+custom_validators: []
+
+# Execution configuration
+async_execution: true
+default_priority: 5
+poll_interval_ms: 1000
+estimated_completion_ms: 5000
+execution_expiry_duration: 1h
+sdk_version: "1.0.0"
+
+# Circuit breaker configuration
+enable_circuit_breaker: true
+circuit_breaker_threshold: 5
+circuit_breaker_timeout: 60s

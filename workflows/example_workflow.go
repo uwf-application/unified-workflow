@@ -1,18 +1,32 @@
 package workflows
 
 import (
+	"fmt"
+
 	"unified-workflow/internal/common/model"
 	"unified-workflow/workflows/steps"
 )
 
 // GetExampleWorkflows returns a list of example workflows that should be available when the API starts
 func GetExampleWorkflows() []model.Workflow {
-	return []model.Workflow{
+	// Get existing example workflows
+	existingWorkflows := []model.Workflow{
 		createEchoWorkflow(),
 		createSequentialWorkflow(),
 		createPaymentProcessingWorkflow(),
 		createMultiStepWorkflow(),
 	}
+
+	// Add antifraud workflows
+	antifraudWorkflows := GetAntifraudWorkflows()
+
+	// Combine all workflows
+	allWorkflows := append(existingWorkflows, antifraudWorkflows...)
+
+	fmt.Printf("Total workflows available: %d (including %d antifraud workflows)\n",
+		len(allWorkflows), len(antifraudWorkflows))
+
+	return allWorkflows
 }
 
 // createEchoWorkflow creates a simple echo workflow

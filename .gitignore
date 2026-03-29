@@ -37,6 +37,12 @@ build/
 coverage/
 *.log
 
+# TypeScript SDK build artifacts
+pkg/client/typescript/dist/
+pkg/client/typescript/node_modules/
+pkg/client/typescript/coverage/
+pkg/client/typescript/*.tsbuildinfo
+
 # Docker
 docker-compose.override.yml
 

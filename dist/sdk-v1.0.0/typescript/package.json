@@ -1,0 +1,67 @@
+{
+  "name": "@unified-workflow/sdk",
+  "version": "1.2.0",
+  "description": "TypeScript/JavaScript SDK for Unified Workflow Execution Platform",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc --project tsconfig.json --outDir dist --module commonjs --target es2020",
+    "build:esm": "tsc --project tsconfig.json --outDir dist --module es2020 --target es2020",
+    "prepublishOnly": "npm run build",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "workflow",
+    "sdk",
+    "typescript",
+    "javascript",
+    "api",
+    "client",
+    "execution",
+    "automation"
+  ],
+  "author": "Unified Workflow Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uwf-application/unified-workflow.git",
+    "directory": "pkg/client/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/uwf-application/unified-workflow/issues"
+  },
+  "homepage": "https://github.com/uwf-application/unified-workflow#readme",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "validator": "^13.11.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@types/validator": "^13.11.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.45.0",
+    "jest": "^29.5.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

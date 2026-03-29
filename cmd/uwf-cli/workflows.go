@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -19,10 +22,6 @@ func newWorkflowsCmd() *cobra.Command {
 	cmd.AddCommand(newWorkflowsCreateCmd())
 	cmd.AddCommand(newWorkflowsGetCmd())
 	cmd.AddCommand(newWorkflowsDeleteCmd())
-	cmd.AddCommand(newWorkflowsExportCmd())
-	cmd.AddCommand(newWorkflowsImportCmd())
-	cmd.AddCommand(newWorkflowsBulkCreateCmd())
-	cmd.AddCommand(newWorkflowsBulkDeleteCmd())
 
 	return cmd
 }
@@ -46,22 +45,32 @@ func runWorkflowsListCmd(cmd *cobra.Command, args []string) error {
 	offset, _ := cmd.Flags().GetInt("offset")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Listing workflows from: %s\n", endpoint)
-	fmt.Printf("Limit: %d, Offset: %d\n", limit, offset)
+	// Build URL with query parameters
+	url := fmt.Sprintf("%s/api/v1/workflows", endpoint)
+	if limit > 0 || offset > 0 {
+		url += fmt.Sprintf("?limit=%d&offset=%d", limit, offset)
+	}
 
-	// Simulate response
-	response := map[string]interface{}{
-		"workflows": []map[string]interface{}{
-			{
-				"id":          "workflow-1771427384409393014",
-				"name":        "Test Workflow",
-				"description": "A simple test workflow for API testing",
-				"step_count":  0,
-			},
-		},
-		"count":  1,
-		"limit":  limit,
-		"offset": offset,
+	// Create HTTP client that skips TLS verification for self-signed certificates
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+	// Make HTTP request
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to list workflows: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -87,15 +96,41 @@ func runWorkflowsCreateCmd(cmd *cobra.Command, args []string) error {
 	name, _ := cmd.Flags().GetString("name")
 	description, _ := cmd.Flags().GetString("description")
 	output, _ := cmd.Flags().GetString("output")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 
-	fmt.Printf("Creating workflow: %s\n", name)
-
-	// Simulate response
-	response := map[string]interface{}{
-		"id":          fmt.Sprintf("workflow-%d", os.Getpid()),
+	// Create workflow payload
+	workflowData := map[string]interface{}{
 		"name":        name,
 		"description": description,
-		"message":     "Workflow created successfully",
+		"steps":       []interface{}{},
+	}
+
+	data, err := json.Marshal(workflowData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal workflow data: %v", err)
+	}
+
+	// Create HTTP client that skips TLS verification for self-signed certificates
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+	// Make HTTP request
+	url := fmt.Sprintf("%s/api/v1/workflows", endpoint)
+	resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to create workflow: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -115,16 +150,29 @@ func newWorkflowsGetCmd() *cobra.Command {
 func runWorkflowsGetCmd(cmd *cobra.Command, args []string) error {
 	workflowID := args[0]
 	output, _ := cmd.Flags().GetString("output")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 
-	fmt.Printf("Getting workflow: %s\n", workflowID)
+	// Create HTTP client that skips TLS verification for self-signed certificates
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
 
-	// Simulate response
-	response := map[string]interface{}{
-		"id":          workflowID,
-		"name":        "Test Workflow",
-		"description": "A simple test workflow for API testing",
-		"step_count":  0,
-		"steps":       []interface{}{},
+	// Make HTTP request
+	url := fmt.Sprintf("%s/api/v1/workflows/%s", endpoint, workflowID)
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to get workflow: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -144,146 +192,42 @@ func newWorkflowsDeleteCmd() *cobra.Command {
 func runWorkflowsDeleteCmd(cmd *cobra.Command, args []string) error {
 	workflowID := args[0]
 	output, _ := cmd.Flags().GetString("output")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 
-	fmt.Printf("Deleting workflow: %s\n", workflowID)
-
-	// Simulate response
-	response := map[string]interface{}{
-		"message": "Workflow deleted successfully",
-		"id":      workflowID,
+	// Create HTTP client that skips TLS verification for self-signed certificates
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
+	client := &http.Client{Transport: tr}
 
-	return printOutput(response, output)
-}
-
-func newWorkflowsExportCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "export [workflow-id]",
-		Short: "Export workflow to file",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWorkflowsExportCmd,
-	}
-
-	cmd.Flags().StringP("output-file", "o", "", "Output file path (default: workflow-{id}.json)")
-
-	return cmd
-}
-
-func runWorkflowsExportCmd(cmd *cobra.Command, args []string) error {
-	workflowID := args[0]
-	outputFile, _ := cmd.Flags().GetString("output-file")
-
-	if outputFile == "" {
-		outputFile = fmt.Sprintf("workflow-%s.json", workflowID)
-	}
-
-	fmt.Printf("Exporting workflow %s to %s\n", workflowID, outputFile)
-
-	// Simulate workflow data
-	workflowData := map[string]interface{}{
-		"id":          workflowID,
-		"name":        "Test Workflow",
-		"description": "A simple test workflow for API testing",
-		"steps":       []interface{}{},
-		"metadata": map[string]interface{}{
-			"exported_at": "2026-02-18T09:12:00Z",
-			"version":     "1.0.0",
-		},
-	}
-
-	data, err := json.MarshalIndent(workflowData, "", "  ")
+	// Make HTTP request
+	url := fmt.Sprintf("%s/api/v1/workflows/%s", endpoint, workflowID)
+	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create delete request: %v", err)
 	}
 
-	return os.WriteFile(outputFile, data, 0644)
-}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete workflow: %v", err)
+	}
+	defer resp.Body.Close()
 
-func newWorkflowsImportCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "import [file]",
-		Short: "Import workflow from file",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWorkflowsImportCmd,
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	return cmd
-}
-
-func runWorkflowsImportCmd(cmd *cobra.Command, args []string) error {
-	filename := args[0]
-	output, _ := cmd.Flags().GetString("output")
-
-	fmt.Printf("Importing workflow from: %s\n", filename)
-
-	// Simulate response
-	response := map[string]interface{}{
-		"message":     "Workflow imported successfully",
-		"filename":    filename,
-		"workflow_id": fmt.Sprintf("workflow-import-%d", os.Getpid()),
-	}
-
-	return printOutput(response, output)
-}
-
-func newWorkflowsBulkCreateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "bulk-create [file]",
-		Short: "Create multiple workflows from file",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWorkflowsBulkCreateCmd,
-	}
-
-	return cmd
-}
-
-func runWorkflowsBulkCreateCmd(cmd *cobra.Command, args []string) error {
-	filename := args[0]
-	output, _ := cmd.Flags().GetString("output")
-
-	fmt.Printf("Bulk creating workflows from: %s\n", filename)
-
-	// Simulate response
-	response := map[string]interface{}{
-		"message":       "Bulk workflow creation completed",
-		"filename":      filename,
-		"created_count": 5,
-		"failed_count":  0,
-		"workflow_ids": []string{
-			"workflow-bulk-1",
-			"workflow-bulk-2",
-			"workflow-bulk-3",
-			"workflow-bulk-4",
-			"workflow-bulk-5",
-		},
-	}
-
-	return printOutput(response, output)
-}
-
-func newWorkflowsBulkDeleteCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "bulk-delete [file]",
-		Short: "Delete multiple workflows from file",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runWorkflowsBulkDeleteCmd,
-	}
-
-	return cmd
-}
-
-func runWorkflowsBulkDeleteCmd(cmd *cobra.Command, args []string) error {
-	filename := args[0]
-	output, _ := cmd.Flags().GetString("output")
-
-	fmt.Printf("Bulk deleting workflows from: %s\n", filename)
-
-	// Simulate response
-	response := map[string]interface{}{
-		"message":       "Bulk workflow deletion completed",
-		"filename":      filename,
-		"deleted_count": 3,
-		"failed_count":  0,
+	var response map[string]interface{}
+	if resp.StatusCode == http.StatusOK {
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
+	} else {
+		// For 204 No Content, create a simple response
+		response = map[string]interface{}{
+			"message": "Workflow deleted successfully",
+			"id":      workflowID,
+		}
 	}
 
 	return printOutput(response, output)

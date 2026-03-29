@@ -10,8 +10,11 @@ echo ""
 
 # Configuration
 VERSION=${1:-"1.0.0"}
-OUTPUT_DIR="dist/sdk-v${VERSION}"
-SDK_DIR="pkg/client/sdk"
+# Remove 'v' prefix if present for directory naming
+VERSION_CLEAN=$(echo "$VERSION" | sed 's/^v//')
+OUTPUT_DIR="dist/sdk-v${VERSION_CLEAN}"
+GO_SDK_DIR="pkg/client/go/sdk"
+TYPESCRIPT_SDK_DIR="pkg/client/typescript"
 EXAMPLES_DIR="examples/sdk"
 
 # Create output directory
@@ -21,13 +24,24 @@ mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${OUTPUT_DIR}/examples"
 mkdir -p "${OUTPUT_DIR}/docs"
 
-# Copy SDK files
-echo "2. Copying SDK files..."
-cp "${SDK_DIR}"/*.go "${OUTPUT_DIR}/"
-cp "${SDK_DIR}/README.md" "${OUTPUT_DIR}/"
+# Copy Go SDK files
+echo "2. Copying Go SDK files..."
+mkdir -p "${OUTPUT_DIR}/go"
+cp "${GO_SDK_DIR}"/*.go "${OUTPUT_DIR}/go/"
+cp "${GO_SDK_DIR}/README.md" "${OUTPUT_DIR}/go/"
+
+# Check if TypeScript SDK exists and copy it
+echo "3. Checking for TypeScript SDK..."
+if [ -d "${TYPESCRIPT_SDK_DIR}" ]; then
+    echo "   Found TypeScript SDK, copying files..."
+    mkdir -p "${OUTPUT_DIR}/typescript"
+    cp -r "${TYPESCRIPT_SDK_DIR}/"* "${OUTPUT_DIR}/typescript/" 2>/dev/null || true
+else
+    echo "   TypeScript SDK not found, skipping..."
+fi
 
 # Create go.mod for standalone SDK
-echo "3. Creating standalone go.mod..."
+echo "4. Creating standalone go.mod..."
 cat > "${OUTPUT_DIR}/go.mod" << EOF
 module github.com/your-org/unified-workflow-sdk
 
@@ -42,7 +56,7 @@ replace github.com/your-org/unified-workflow-sdk => ./
 EOF
 
 # Create go.sum with minimal dependencies
-echo "4. Creating go.sum..."
+echo "5. Creating go.sum..."
 cat > "${OUTPUT_DIR}/go.sum" << EOF
 github.com/bytedance/sonic v1.14.0 h1:QcKq+Q7mHjvqkQqJQqQqQqQqQqQqQqQqQqQqQqQqQq=
 github.com/bytedance/sonic v1.14.0/go.mod h1:QcKq+Q7mHjvqkQqJQqQqQqQqQqQqQqQqQqQqQqQqQq=
@@ -53,7 +67,7 @@ golang.org/x/net v0.47.0/go.mod h1:QcKq+Q7mHjvqkQqJQqQqQqQqQqQqQqQqQqQqQqQqQq=
 EOF
 
 # Create example files
-echo "5. Creating example files..."
+echo "6. Creating example files..."
 cat > "${OUTPUT_DIR}/examples/basic_usage.go" << 'EOF'
 package main
 
@@ -201,12 +215,12 @@ func main() {
 EOF
 
 # Create documentation
-echo "6. Creating documentation..."
+echo "7. Creating documentation..."
 cp "CLIENT_SDK_GUIDE.md" "${OUTPUT_DIR}/docs/CLIENT_GUIDE.md"
 cp "RELEASE_PLAN.md" "${OUTPUT_DIR}/docs/RELEASE_PLAN.md"
 
 # Create README for the packaged SDK
-echo "7. Creating package README..."
+echo "8. Creating package README..."
 cat > "${OUTPUT_DIR}/README.md" << 'EOF'
 # Unified Workflow SDK
 
@@ -294,7 +308,7 @@ MIT License - See LICENSE file for details.
 EOF
 
 # Create LICENSE file
-echo "8. Creating LICENSE file..."
+echo "9. Creating LICENSE file..."
 cat > "${OUTPUT_DIR}/LICENSE" << 'EOF'
 MIT License
 
@@ -320,7 +334,7 @@ SOFTWARE.
 EOF
 
 # Create build script
-echo "9. Creating build script..."
+echo "10. Creating build script..."
 cat > "${OUTPUT_DIR}/build.sh" << 'EOF'
 #!/bin/bash
 
@@ -346,16 +360,16 @@ EOF
 chmod +x "${OUTPUT_DIR}/build.sh"
 
 # Create archive
-echo "10. Creating distribution archive..."
+echo "11. Creating distribution archive..."
 cd dist
-tar -czf "unified-workflow-sdk-v${VERSION}.tar.gz" "sdk-v${VERSION}"
+tar -czf "unified-workflow-sdk-v${VERSION_CLEAN}.tar.gz" "sdk-v${VERSION_CLEAN}"
 cd ..
 
 echo ""
 echo "=== Packaging Complete ==="
 echo ""
 echo "Distribution package created:"
-echo "  - dist/unified-workflow-sdk-v${VERSION}.tar.gz"
+echo "  - dist/unified-workflow-sdk-v${VERSION_CLEAN}.tar.gz"
 echo ""
 echo "Package contents:"
 echo "  - SDK source code (.go files)"

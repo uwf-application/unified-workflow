@@ -1,0 +1,46 @@
+{
+  "sdkVersion": "1.0.0",
+  "workflowApiEndpoint": "http://localhost:8080",
+  "timeoutMs": 30000,
+  "maxRetries": 3,
+  "retryDelayMs": 1000,
+  "authType": "bearer_token",
+  "authToken": "your-auth-token-here",
+  "enableValidation": true,
+  "enableSanitization": true,
+  "strictValidation": false,
+  "enableSessionExtraction": true,
+  "enableSecurityContext": true,
+  "includeFullHttpContext": true,
+  "logLevel": "info",
+  "enableRequestLogging": true,
+  "enableMetrics": true,
+  "defaultValidationRules": [
+    {
+      "field": "userId",
+      "ruleType": "required",
+      "required": true
+    },
+    {
+      "field": "email",
+      "ruleType": "email",
+      "required": true
+    },
+    {
+      "field": "amount",
+      "ruleType": "number",
+      "minValue": 0.01,
+      "maxValue": 1000000
+    }
+  ],
+  "customValidators": [],
+  "asyncExecution": true,
+  "defaultPriority": 5,
+  "pollIntervalMs": 1000,
+  "estimatedCompletionMs": 5000,
+  "executionExpiryDurationMs": 3600000,
+  "enableCircuitBreaker": true,
+  "circuitBreakerThreshold": 5,
+  "circuitBreakerTimeoutMs": 60000,
+  "maxRedirects": 5
+}

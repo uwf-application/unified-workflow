@@ -30,6 +30,9 @@ type NATSConfig struct {
 	MaxReconnects  int           `json:"max_reconnects"`
 	ReconnectWait  time.Duration `json:"reconnect_wait"`
 	ConnectTimeout time.Duration `json:"connect_timeout"`
+	Username       string        `json:"username"`
+	Password       string        `json:"password"`
+	Token          string        `json:"token"`
 }
 
 // NewNATSQueue creates a new NATS JetStream queue
@@ -45,6 +48,13 @@ func NewNATSQueue(config NATSConfig) (*NATSQueue, error) {
 		nats.ReconnectHandler(func(nc *nats.Conn) {
 			fmt.Printf("NATS reconnected to %s\n", nc.ConnectedUrl())
 		}),
+	}
+
+	// Add authentication if provided
+	if config.Token != "" {
+		opts = append(opts, nats.Token(config.Token))
+	} else if config.Username != "" && config.Password != "" {
+		opts = append(opts, nats.UserInfo(config.Username, config.Password))
 	}
 
 	conn, err := nats.Connect(config.URLs[0], opts...)

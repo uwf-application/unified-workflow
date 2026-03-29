@@ -28,7 +28,15 @@ func main() {
 	}
 
 	// Initialize components
-	reg := registry.NewInMemoryRegistry()
+	// Use HTTP registry to connect to registry service
+	var reg registry.Registry
+	httpReg, err := registry.NewHTTPRegistry("http://registry-service:8080")
+	if err != nil {
+		log.Printf("Failed to create HTTP registry, falling back to in-memory: %v", err)
+		reg = registry.NewInMemoryRegistry()
+	} else {
+		reg = httpReg
+	}
 	stateMgmt := state.NewInMemoryState()
 
 	// Initialize queue based on configuration

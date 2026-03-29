@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -44,46 +48,37 @@ func newExecutionsListCmd() *cobra.Command {
 }
 
 func runExecutionsListCmd(cmd *cobra.Command, args []string) error {
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	limit, _ := cmd.Flags().GetInt("limit")
 	offset, _ := cmd.Flags().GetInt("offset")
 	workflowID, _ := cmd.Flags().GetString("workflow-id")
 	status, _ := cmd.Flags().GetString("status")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Listing executions (limit: %d, offset: %d)\n", limit, offset)
+	url := fmt.Sprintf("%s/api/v1/executions?limit=%d&offset=%d", endpoint, limit, offset)
 	if workflowID != "" {
-		fmt.Printf("Filter by workflow ID: %s\n", workflowID)
+		url += fmt.Sprintf("&workflow_id=%s", workflowID)
 	}
 	if status != "" {
-		fmt.Printf("Filter by status: %s\n", status)
+		url += fmt.Sprintf("&status=%s", status)
 	}
 
-	// Simulate response
-	response := map[string]interface{}{
-		"executions": []map[string]interface{}{
-			{
-				"run_id":      "run-1771433588043084557",
-				"workflow_id": "workflow-1771427384409393014",
-				"status":      "queued",
-				"progress":    0.0,
-				"start_time":  time.Now().Add(-5 * time.Minute).Format(time.RFC3339),
-			},
-			{
-				"run_id":      "run-1771433588043084556",
-				"workflow_id": "workflow-1771427384409393014",
-				"status":      "completed",
-				"progress":    1.0,
-				"start_time":  time.Now().Add(-10 * time.Minute).Format(time.RFC3339),
-				"end_time":    time.Now().Add(-9 * time.Minute).Format(time.RFC3339),
-			},
-		},
-		"count":  2,
-		"limit":  limit,
-		"offset": offset,
-		"filters": map[string]interface{}{
-			"workflow_id": workflowID,
-			"status":      status,
-		},
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to list executions: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -102,26 +97,27 @@ func newExecutionsStatusCmd() *cobra.Command {
 
 func runExecutionsStatusCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Getting status for execution: %s\n", runID)
+	url := fmt.Sprintf("%s/api/v1/executions/%s", endpoint, runID)
 
-	// Simulate response
-	response := map[string]interface{}{
-		"run_id":                   runID,
-		"workflow_id":              "workflow-1771427384409393014",
-		"status":                   "running",
-		"current_step":             "step-1",
-		"current_step_index":       0,
-		"current_child_step_index": 0,
-		"progress":                 0.5,
-		"start_time":               time.Now().Add(-2 * time.Minute).Format(time.RFC3339),
-		"error_message":            "",
-		"last_attempted_step":      "step-1",
-		"is_terminal":              false,
-		"metadata": map[string]interface{}{
-			"estimated_completion": time.Now().Add(2 * time.Minute).Format(time.RFC3339),
-		},
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to get execution status: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -145,32 +141,27 @@ func runExecutionsResultCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
 	waitMs, _ := cmd.Flags().GetInt("wait-ms")
 	longPoll, _ := cmd.Flags().GetBool("long-poll")
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Getting result for execution: %s\n", runID)
-	if waitMs > 0 {
-		fmt.Printf("Wait time: %d ms, Long poll: %v\n", waitMs, longPoll)
+	url := fmt.Sprintf("%s/api/v1/executions/%s/result?wait_ms=%d&long_poll=%v", endpoint, runID, waitMs, longPoll)
+
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to get execution result: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	// Simulate response
-	response := map[string]interface{}{
-		"run_id": runID,
-		"status": "completed",
-		"result": map[string]interface{}{
-			"run_id":      runID,
-			"workflow_id": "workflow-1771427384409393014",
-			"status":      "completed",
-			"result": map[string]interface{}{
-				"success": true,
-				"data": map[string]interface{}{
-					"processed": true,
-					"output":    "Execution completed successfully",
-				},
-			},
-			"completed_at":          time.Now().Format(time.RFC3339),
-			"execution_time_millis": 2150,
-			"step_count":            1,
-		},
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -189,27 +180,27 @@ func newExecutionsDataCmd() *cobra.Command {
 
 func runExecutionsDataCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Getting data for execution: %s\n", runID)
+	url := fmt.Sprintf("%s/api/v1/executions/%s/data", endpoint, runID)
 
-	// Simulate response
-	response := map[string]interface{}{
-		"run_id": runID,
-		"data": map[string]interface{}{
-			"input": map[string]interface{}{
-				"test": "data",
-				"user": "test_user",
-			},
-			"output": map[string]interface{}{
-				"success": true,
-				"message": "Workflow completed",
-			},
-			"intermediate": map[string]interface{}{
-				"step1": "completed",
-				"step2": "skipped",
-			},
-		},
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to get execution data: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -228,40 +219,27 @@ func newExecutionsMetricsCmd() *cobra.Command {
 
 func runExecutionsMetricsCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Getting metrics for execution: %s\n", runID)
+	url := fmt.Sprintf("%s/api/v1/executions/%s/metrics", endpoint, runID)
 
-	// Simulate response
-	response := map[string]interface{}{
-		"run_id":                runID,
-		"workflow_id":           "workflow-1771427384409393014",
-		"total_steps":           5,
-		"completed_steps":       3,
-		"failed_steps":          0,
-		"total_child_steps":     10,
-		"completed_child_steps": 6,
-		"failed_child_steps":    1,
-		"total_duration_millis": 3250,
-		"average_step_duration": 650,
-		"success_rate":          0.85,
-		"step_metrics": []map[string]interface{}{
-			{
-				"step_name":   "step-1",
-				"duration_ms": 450,
-				"status":      "completed",
-			},
-			{
-				"step_name":   "step-2",
-				"duration_ms": 620,
-				"status":      "completed",
-			},
-			{
-				"step_name":   "step-3",
-				"duration_ms": 530,
-				"status":      "completed",
-			},
-		},
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to get execution metrics: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -280,15 +258,34 @@ func newExecutionsCancelCmd() *cobra.Command {
 
 func runExecutionsCancelCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Cancelling execution: %s\n", runID)
+	url := fmt.Sprintf("%s/api/v1/executions/%s/cancel", endpoint, runID)
 
-	// Simulate response
-	response := map[string]interface{}{
-		"message":      "Execution cancelled successfully",
-		"run_id":       runID,
-		"cancelled_at": time.Now().Format(time.RFC3339),
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Post(url, "application/json", bytes.NewBufferString("{}"))
+	if err != nil {
+		return fmt.Errorf("failed to cancel execution: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if resp.StatusCode == http.StatusNoContent {
+		response = map[string]interface{}{
+			"message": "cancelled",
+			"run_id":  runID,
+		}
+	} else {
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
 	}
 
 	return printOutput(response, output)
@@ -307,15 +304,34 @@ func newExecutionsPauseCmd() *cobra.Command {
 
 func runExecutionsPauseCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Pausing execution: %s\n", runID)
+	url := fmt.Sprintf("%s/api/v1/executions/%s/pause", endpoint, runID)
 
-	// Simulate response
-	response := map[string]interface{}{
-		"message":   "Execution paused successfully",
-		"run_id":    runID,
-		"paused_at": time.Now().Format(time.RFC3339),
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Post(url, "application/json", bytes.NewBufferString("{}"))
+	if err != nil {
+		return fmt.Errorf("failed to pause execution: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if resp.StatusCode == http.StatusNoContent {
+		response = map[string]interface{}{
+			"message": "paused",
+			"run_id":  runID,
+		}
+	} else {
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
 	}
 
 	return printOutput(response, output)
@@ -334,15 +350,34 @@ func newExecutionsResumeCmd() *cobra.Command {
 
 func runExecutionsResumeCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Resuming execution: %s\n", runID)
+	url := fmt.Sprintf("%s/api/v1/executions/%s/resume", endpoint, runID)
 
-	// Simulate response
-	response := map[string]interface{}{
-		"message":    "Execution resumed successfully",
-		"run_id":     runID,
-		"resumed_at": time.Now().Format(time.RFC3339),
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Post(url, "application/json", bytes.NewBufferString("{}"))
+	if err != nil {
+		return fmt.Errorf("failed to resume execution: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if resp.StatusCode == http.StatusNoContent {
+		response = map[string]interface{}{
+			"message": "resumed",
+			"run_id":  runID,
+		}
+	} else {
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
 	}
 
 	return printOutput(response, output)
@@ -361,16 +396,27 @@ func newExecutionsRetryCmd() *cobra.Command {
 
 func runExecutionsRetryCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Retrying execution: %s\n", runID)
+	url := fmt.Sprintf("%s/api/v1/executions/%s/retry", endpoint, runID)
 
-	// Simulate response
-	response := map[string]interface{}{
-		"message":    "Execution retry initiated successfully",
-		"run_id":     runID,
-		"new_run_id": fmt.Sprintf("retry-%s-%d", runID, time.Now().Unix()),
-		"retried_at": time.Now().Format(time.RFC3339),
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	resp, err := httpClient.Post(url, "application/json", bytes.NewBufferString("{}"))
+	if err != nil {
+		return fmt.Errorf("failed to retry execution: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return printOutput(response, output)
@@ -393,36 +439,52 @@ func newExecutionsWatchCmd() *cobra.Command {
 
 func runExecutionsWatchCmd(cmd *cobra.Command, args []string) error {
 	runID := args[0]
+	endpoint, _ := cmd.Flags().GetString("endpoint")
 	interval, _ := cmd.Flags().GetDuration("interval")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
-	exitOnCompletion, _ := cmd.Flags().GetBool("exit-on-completion")
 	output, _ := cmd.Flags().GetString("output")
 
-	fmt.Printf("Watching execution: %s\n", runID)
-	fmt.Printf("Interval: %v, Timeout: %v, Exit on completion: %v\n", interval, timeout, exitOnCompletion)
+	url := fmt.Sprintf("%s/api/v1/executions/%s", endpoint, runID)
 
-	// Simulate watching
-	for i := 0; i < 3; i++ {
-		response := map[string]interface{}{
-			"run_id":    runID,
-			"status":    "running",
-			"progress":  float64(i+1) / 3.0,
-			"timestamp": time.Now().Format(time.RFC3339),
-			"update":    i + 1,
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	httpClient := &http.Client{Transport: tr}
+
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		resp, err := httpClient.Get(url)
+		if err != nil {
+			return fmt.Errorf("failed to get execution status: %v", err)
 		}
 
-		printOutput(response, output)
-		time.Sleep(interval)
-	}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return fmt.Errorf("API returned status %d", resp.StatusCode)
+		}
 
-	// Final completion
-	response := map[string]interface{}{
-		"run_id":    runID,
-		"status":    "completed",
-		"progress":  1.0,
-		"timestamp": time.Now().Format(time.RFC3339),
-		"message":   "Execution completed",
-	}
+		var response map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			resp.Body.Close()
+			return fmt.Errorf("failed to decode response: %v", err)
+		}
+		resp.Body.Close()
 
-	return printOutput(response, output)
+		if err := printOutput(response, output); err != nil {
+			return err
+		}
+
+		if st, ok := response["status"].(string); ok {
+			if st == "completed" || st == "failed" || st == "cancelled" {
+				return nil
+			}
+		}
+
+		select {
+		case <-deadline:
+			return fmt.Errorf("watch timed out after %v", timeout)
+		case <-ticker.C:
+		}
+	}
 }

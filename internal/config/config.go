@@ -239,6 +239,26 @@ func applyEnvOverrides(config *Config) {
 		config.Queue.Type = val
 	}
 
+	// NATS configuration
+	if val := os.Getenv("NATS_URL"); val != "" {
+		config.Queue.NATS.URLs = []string{val}
+	}
+	if val := os.Getenv("NATS_CONNECT_TIMEOUT"); val != "" {
+		if timeout, err := time.ParseDuration(val); err == nil {
+			config.Queue.NATS.ConnectTimeout = timeout
+		}
+	}
+	if val := os.Getenv("NATS_RECONNECT_WAIT"); val != "" {
+		if wait, err := time.ParseDuration(val); err == nil {
+			config.Queue.NATS.ReconnectWait = wait
+		}
+	}
+	if val := os.Getenv("NATS_MAX_RECONNECTS"); val != "" {
+		if reconnects, err := strconv.Atoi(val); err == nil {
+			config.Queue.NATS.MaxReconnects = reconnects
+		}
+	}
+
 	// Registry service URL
 	if val := os.Getenv("REGISTRY_SERVICE_URL"); val != "" {
 		config.Services.Registry.URL = val

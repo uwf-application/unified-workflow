@@ -27,24 +27,20 @@ func CreateAntifraudTransactionWorkflow(endpoint string) model.Workflow {
 	workflow.AddStep(amlStep)
 	fmt.Println("✓ Added AMLValidationStep")
 
-	// Note: FCValidationStep, MLValidationStep, and FinalizeTransactionStep
-	// would be implemented similarly to AMLValidationStep
-	// For now, we'll use sequential steps as placeholders
-
-	// Step 3: FC Validation (Fraud Check) - placeholder
-	fcStep := model.NewSequentialStep("fc-validation-placeholder")
+	// Step 3: FC Validation (Fraud Check)
+	fcStep := steps.NewFCValidationStep(endpoint)
 	workflow.AddStep(fcStep)
-	fmt.Println("✓ Added FCValidationStep (placeholder)")
+	fmt.Println("✓ Added FCValidationStep")
 
-	// Step 4: ML Validation (Machine Learning) - placeholder
-	mlStep := model.NewSequentialStep("ml-validation-placeholder")
+	// Step 4: ML Validation (Machine Learning)
+	mlStep := steps.NewMLValidationStep(endpoint)
 	workflow.AddStep(mlStep)
-	fmt.Println("✓ Added MLValidationStep (placeholder)")
+	fmt.Println("✓ Added MLValidationStep")
 
-	// Step 5: Finalize Transaction - placeholder
-	finalizeStep := model.NewSequentialStep("finalize-transaction-placeholder")
+	// Step 5: Finalize Transaction
+	finalizeStep := steps.NewFinalizeTransactionStep(endpoint)
 	workflow.AddStep(finalizeStep)
-	fmt.Println("✓ Added FinalizeTransactionStep (placeholder)")
+	fmt.Println("✓ Added FinalizeTransactionStep")
 
 	fmt.Printf("✓ Antifraud workflow created with %d steps\n", workflow.GetStepCount())
 	fmt.Printf("✓ Total child steps: %d\n", workflow.GetTotalChildStepCount())

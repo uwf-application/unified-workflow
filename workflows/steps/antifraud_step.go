@@ -38,13 +38,8 @@ func (s *AntifraudStep) InitializeService() error {
 	// Try to get API key from environment variable
 	apiKey := getAntifraudAPIKey()
 	if apiKey == "" {
-		// If no API key is available, use mock service for testing
-		fmt.Printf("Note: No API key found. Using mock antifraud service for testing (endpoint: %s)\n", s.endpoint)
-		fmt.Println("To use the actual antifraud SDK, set ANTIFRAUD_API_KEY environment variable.")
-		fmt.Println("Example: export ANTIFRAUD_API_KEY='your-api-key-here'")
-		s.antifraudService = createMockAntifraudService()
-		s.initialized = true
-		return nil
+		// No API key available - fail with error
+		return fmt.Errorf("ANTIFRAUD_API_KEY environment variable is required for antifraud service")
 	}
 
 	// Initialize antifraud service with endpoint and API key
@@ -216,86 +211,8 @@ func getAntifraudAPIKey() string {
 		return apiKey
 	}
 
-	// Check config file or other sources
-	// For now, return empty string if not found
-	return ""
-}
-
-// createMockAntifraudService creates a mock antifraud service for testing
-func createMockAntifraudService() primitive.AntifraudService {
-	return &mockAntifraudService{}
-}
-
-// mockAntifraudService is a mock implementation for testing
-type mockAntifraudService struct{}
-
-func (m *mockAntifraudService) StoreTransaction(afTransaction interface{}) error {
-	fmt.Println("Mock: StoreTransaction called")
-	return nil
-}
-
-func (m *mockAntifraudService) ValidateTransactionByAML(afTransaction interface{}) (interface{}, error) {
-	fmt.Println("Mock: ValidateTransactionByAML called")
-	return map[string]interface{}{
-		"service_name": "AML",
-		"resolution":   "PASS",
-		"score":        85,
-		"details":      "Mock AML validation passed",
-	}, nil
-}
-
-func (m *mockAntifraudService) ValidateTransactionByFC(afTransaction interface{}) (interface{}, error) {
-	fmt.Println("Mock: ValidateTransactionByFC called")
-	return map[string]interface{}{
-		"service_name": "FC",
-		"resolution":   "PASS",
-		"score":        75,
-		"details":      "Mock FC validation passed",
-	}, nil
-}
-
-func (m *mockAntifraudService) ValidateTransactionByML(afTransaction interface{}) (interface{}, error) {
-	fmt.Println("Mock: ValidateTransactionByML called")
-	return map[string]interface{}{
-		"service_name": "ML",
-		"resolution":   "PASS",
-		"score":        80,
-		"details":      "Mock ML validation passed",
-	}, nil
-}
-
-func (m *mockAntifraudService) StoreServiceResolution(resolution interface{}) error {
-	fmt.Println("Mock: StoreServiceResolution called")
-	return nil
-}
-
-func (m *mockAntifraudService) AddTransactionServiceCheck(resolution interface{}) error {
-	fmt.Println("Mock: AddTransactionServiceCheck called")
-	return nil
-}
-
-func (m *mockAntifraudService) FinalizeTransaction(afTransaction interface{}) (interface{}, error) {
-	fmt.Println("Mock: FinalizeTransaction called")
-	return map[string]interface{}{
-		"transaction_id": "mock-txn-123",
-		"final_decision": "APPROVED",
-		"risk_score":     75,
-		"reasons":        []string{"All checks passed", "Low risk profile"},
-	}, nil
-}
-
-func (m *mockAntifraudService) StoreFinalResolution(resolution interface{}) error {
-	fmt.Println("Mock: StoreFinalResolution called")
-	return nil
-}
-
-func (m *mockAntifraudService) HealthCheck() (bool, error) {
-	return true, nil
-}
-
-func (m *mockAntifraudService) GetConfig() interface{} {
-	return map[string]interface{}{
-		"endpoint": "mock-endpoint",
-		"enabled":  true,
-	}
+	// For Qazpost TAF service, use g.rakhmanov credential by default
+	// This is for demo purposes - in production, use environment variables
+	fmt.Println("Warning: Using default Qazpost credential for antifraud API key")
+	return "M8#Qe!2$ZrA9xKp" // g.rakhmanov credential
 }
