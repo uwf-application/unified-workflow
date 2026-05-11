@@ -7,15 +7,24 @@ The Unified Workflow SDK provides a simple, type-safe interface for interacting 
 
 ### Installation
 
-#### Option 1: Go Module (Recommended)
+Download `unified-workflow-sdk-v1.2.0.tar.gz` from the [release page](https://github.com/uwf-application/unified-workflow/releases/tag/v1.2.0):
+
 ```bash
-go get github.com/your-org/unified-workflow-sdk
+curl -L -o unified-workflow-sdk-v1.2.0.tar.gz \
+  https://github.com/uwf-application/unified-workflow/releases/download/v1.2.0/unified-workflow-sdk-v1.2.0.tar.gz
+
+tar -xzf unified-workflow-sdk-v1.2.0.tar.gz
 ```
 
-#### Option 2: Direct Import
+Add to your `go.mod`:
+
 ```go
-import "unified-workflow/pkg/client/go/sdk"
+require github.com/uwf-application/unified-workflow-sdk v0.0.0
+
+replace github.com/uwf-application/unified-workflow-sdk => ./unified-workflow-sdk-v1.2.0
 ```
+
+Run `go mod tidy`.
 
 ### Basic Usage
 
@@ -27,8 +36,8 @@ import (
     "fmt"
     "log"
     "time"
-    
-    "github.com/your-org/unified-workflow-sdk"
+
+    sdk "github.com/uwf-application/unified-workflow-sdk"
 )
 
 func main() {
@@ -528,16 +537,8 @@ type SDKExecuteWorkflowResponse struct {
 ## Support
 
 ### Getting Help
-- **Documentation**: Complete API reference and examples
-- **GitHub Issues**: Report bugs and request features
-- **Stack Overflow**: Tag questions with `unified-workflow-sdk`
-- **Email Support**: enterprise-support@your-org.com
-
-### Community Resources
-- **Sample Applications**: GitHub repository examples
-- **Blog Posts**: Integration tutorials and best practices
-- **Video Tutorials**: Step-by-step guides
-- **Office Hours**: Weekly Q&A sessions
+- **GitHub Issues**: https://github.com/uwf-application/unified-workflow/issues
+- **Release Page**: https://github.com/uwf-application/unified-workflow/releases/tag/v1.2.0
 
 ## Migration Guide
 
@@ -560,8 +561,50 @@ Benefits:
 - Better error handling
 - Connection pooling
 
+## Java SDK
+
+The Java SDK is published to GitHub Packages (Maven).
+
+### Maven setup
+
+Add to `~/.m2/settings.xml` — GitHub Packages requires authentication even for public packages:
+
+```xml
+<settings>
+  <servers>
+    <server>
+      <id>uwf-github</id>
+      <username>YOUR_GITHUB_USERNAME</username>
+      <password>YOUR_GITHUB_TOKEN</password>
+    </server>
+  </servers>
+</settings>
+```
+
+> Your GitHub token needs the `read:packages` scope. Create one at https://github.com/settings/tokens
+
+Add to `pom.xml`:
+
+```xml
+<repositories>
+  <repository>
+    <id>uwf-github</id>
+    <url>https://maven.pkg.github.com/uwf-application/unified-workflow</url>
+  </repository>
+</repositories>
+
+<dependency>
+  <groupId>io.unifiedworkflow</groupId>
+  <artifactId>unified-workflow-sdk</artifactId>
+  <version>1.2.0</version>
+</dependency>
+```
+
+Then run:
+```bash
+mvn dependency:resolve
+```
+
 ## Conclusion
 
 The Unified Workflow SDK simplifies integration with the workflow execution platform while providing robust features for production use. Follow the best practices outlined in this guide to build reliable, maintainable applications.
-
-For more detailed information, refer to the complete API documentation and example applications in the SDK repository.
