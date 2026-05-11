@@ -3,7 +3,8 @@ name: Release Components
 on:
   push:
     tags:
-      - 'v*.*.*'  # Trigger on version tags like v1.0.0, v1.1.0, etc.
+      - 'v*.*.*'   # v1.0.0, v1.1.0, etc.
+      - 'v.*.*.*'  # v.1.0.0 legacy format
 
 jobs:
   build-and-release:
@@ -89,6 +90,30 @@ jobs:
         docker push ghcr.io/${{ github.repository_owner }}/uwf-worker:${{ steps.version.outputs.VERSION }}
         docker push ghcr.io/${{ github.repository_owner }}/uwf-worker:latest
     
+    - name: Set up Java 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Publish Java SDK to GitHub Packages
+      run: |
+        mvn --batch-mode deploy -f pkg/client/java/pom.xml \
+          -DskipTests \
+          -Drevision=${{ steps.version.outputs.VERSION }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Package Go SDK
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        SDK_DIR="unified-workflow-sdk-${VERSION}"
+        mkdir -p "$SDK_DIR"
+        cp -r dist/sdk-v1.2.0/* "$SDK_DIR/"
+        tar -czf "unified-workflow-sdk-${VERSION}.tar.gz" "$SDK_DIR"
+        shasum -a 256 "unified-workflow-sdk-${VERSION}.tar.gz" >> checksums.txt
+
     - name: Build binaries
       run: |
         VERSION="${{ steps.version.outputs.VERSION }}"
@@ -187,6 +212,8 @@ jobs:
           unified-workflow-stack-${{ steps.version.outputs.VERSION }}.sha256
           unified-workflow-binaries-${{ steps.version.outputs.VERSION }}.tar.gz
           unified-workflow-binaries-${{ steps.version.outputs.VERSION }}.sha256
+          unified-workflow-sdk-${{ steps.version.outputs.VERSION }}.tar.gz
+          checksums.txt
         generate_release_notes: true
         prerelease: false
     

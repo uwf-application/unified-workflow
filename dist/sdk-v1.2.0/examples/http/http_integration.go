@@ -1,13 +1,12 @@
 package main
 
 import (
-    "context"
     "fmt"
     "log"
     "net/http"
     "time"
     
-    sdk "github.com/your-org/unified-workflow-sdk"
+    sdk "github.com/uwf-application/unified-workflow-sdk"
 )
 
 func main() {

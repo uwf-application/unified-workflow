@@ -10,7 +10,7 @@ import (
 // Example demonstrates how to use the Workflow SDK
 func Example() {
 	// Load SDK configuration from config file
-	sdkConfig, err := LoadSDKConfig()
+	sdkConfig, err := LoadDefaultConfig()
 	if err != nil {
 		fmt.Printf("Failed to load SDK configuration: %v\n", err)
 		fmt.Printf("Falling back to default configuration\n")
@@ -270,7 +270,7 @@ func ExampleHTTPHandler() http.HandlerFunc {
 		ctx := r.Context()
 
 		// Load SDK configuration from config file
-		sdkConfig, err := LoadSDKConfig()
+		sdkConfig, err := LoadDefaultConfig()
 		if err != nil {
 			// Log error but continue with default config
 			fmt.Printf("Failed to load SDK configuration: %v\n", err)

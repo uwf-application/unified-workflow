@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unified-workflow/internal/config"
 
 	"github.com/goccy/go-yaml"
 )
@@ -133,56 +132,11 @@ func DefaultConfig() SDKConfig {
 		PollIntervalMs:          1000,
 		EstimatedCompletionMs:   5000,
 		ExecutionExpiryDuration: 1 * time.Hour,
-		SDKVersion:              "1.0.0",
+		SDKVersion:              "1.2.0",
 		EnableCircuitBreaker:    true,
 		CircuitBreakerThreshold: 5,
 		CircuitBreakerTimeout:   60 * time.Second,
 	}
-}
-
-// NewConfigFromAppConfig creates SDK configuration from the main application config
-func NewConfigFromAppConfig(appConfig interface{}) SDKConfig {
-	// Try to cast to the main config type
-	if cfg, ok := appConfig.(*config.Config); ok {
-		return SDKConfig{
-			WorkflowAPIEndpoint:     cfg.Clients.SDK.WorkflowAPIEndpoint,
-			Timeout:                 30 * time.Second,
-			MaxRetries:              3,
-			RetryDelay:              1 * time.Second,
-			AuthType:                AuthTypeBearerToken,
-			EnableValidation:        true,
-			EnableSanitization:      true,
-			StrictValidation:        false,
-			EnableSessionExtraction: true,
-			EnableSecurityContext:   true,
-			IncludeFullHTTPContext:  true,
-			LogLevel:                LogLevelInfo,
-			EnableRequestLogging:    true,
-			EnableMetrics:           true,
-			DefaultValidationRules:  []ValidationRule{},
-			CustomValidators:        []string{},
-		}
-	}
-
-	// Fall back to default config
-	return DefaultConfig()
-}
-
-// LoadSDKConfig loads SDK configuration from the main config file
-func LoadSDKConfig() (SDKConfig, error) {
-	// Load the main application config
-	appConfig, err := config.LoadConfig()
-	if err != nil {
-		return DefaultConfig(), fmt.Errorf("failed to load application config: %w", err)
-	}
-
-	// Create SDK config from app config
-	sdkConfig := NewConfigFromAppConfig(appConfig)
-
-	// Apply environment variable overrides for SDK-specific settings
-	applySDKEnvOverrides(&sdkConfig)
-
-	return sdkConfig, nil
 }
 
 // LoadConfigFromFile loads SDK configuration from a YAML or JSON file
