@@ -221,10 +221,21 @@ jobs:
         # List created files
         ls -la unified-workflow-*${{ steps.version.outputs.VERSION }}.*
     
+    - name: Create or update tag for workflow_dispatch
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        git config user.email "actions@github.com"
+        git config user.name "GitHub Actions"
+        git tag -f "${{ steps.version.outputs.VERSION }}"
+        git push origin "${{ steps.version.outputs.VERSION }}" --force
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       if: github.event_name != 'pull_request'
       with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
         files: |
           unified-workflow-stack-${{ steps.version.outputs.VERSION }}.tar.gz
           unified-workflow-stack-${{ steps.version.outputs.VERSION }}.sha256
