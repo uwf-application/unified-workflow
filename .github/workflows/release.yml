@@ -92,6 +92,7 @@ jobs:
     
     - name: Push Docker images
       if: github.event_name != 'pull_request'
+      continue-on-error: true
       run: |
         # Push all images
         docker push ghcr.io/${{ github.repository_owner }}/uwf-registry:${{ steps.version.outputs.VERSION }}

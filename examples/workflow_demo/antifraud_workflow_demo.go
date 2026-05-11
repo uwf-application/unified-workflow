@@ -19,7 +19,7 @@ func main() {
 
 	// 1. Configure SDK for TAF environment
 	fmt.Println("1. Configuring SDK...")
-	sdkConfig, err := sdk.LoadSDKConfig()
+	sdkConfig, err := sdk.LoadDefaultConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load SDK config: %v", err)
 		sdkConfig = sdk.DefaultConfig()
