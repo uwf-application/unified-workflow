@@ -116,6 +116,7 @@ jobs:
         server-password: MAVEN_TOKEN
 
     - name: Publish Java SDK to GitHub Packages
+      continue-on-error: true  # 409 Conflict = already published for this version, which is fine
       run: |
         mvn --batch-mode deploy -f pkg/client/java/pom.xml \
           -DskipTests
