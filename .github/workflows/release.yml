@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*.*.*'   # v1.0.0, v1.1.0, etc.
       - 'v.*.*.*'  # v.1.0.0 legacy format
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.2.0)'
+        required: true
+        default: 'v1.2.0'
 
 jobs:
   build-and-release:
@@ -27,10 +33,14 @@ jobs:
     - name: Extract version from tag
       id: version
       run: |
-        VERSION=${GITHUB_REF#refs/tags/}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
         echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
         echo "VERSION=${VERSION}"
-    
+
     - name: Run tests
       run: |
         go test ./... -short
