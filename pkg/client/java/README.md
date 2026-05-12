@@ -9,20 +9,76 @@ Java 21 client SDK for the [Unified Workflow System](../../README.md) — a high
 
 ## Installation
 
-### Maven
+The SDK is published to **GitHub Packages** (not Maven Central). You must configure the repository URL and authentication credentials before Maven or Gradle can resolve it.
+
+### Step 1 — Create a GitHub personal access token
+
+Go to https://github.com/settings/tokens → **Generate new token (classic)** → tick **`read:packages`** → copy the token.
+
+### Step 2 — Add credentials to `~/.m2/settings.xml`
+
+GitHub Packages requires authentication even for public packages:
 
 ```xml
-<dependency>
+<settings>
+  <servers>
+    <server>
+      <id>uwf-github</id>
+      <username>YOUR_GITHUB_USERNAME</username>
+      <password>YOUR_GITHUB_TOKEN</password>
+    </server>
+  </servers>
+</settings>
+```
+
+### Step 3 — Add repository and dependency to `pom.xml`
+
+```xml
+<repositories>
+  <repository>
+    <id>uwf-github</id>
+    <url>https://maven.pkg.github.com/uwf-application/unified-workflow</url>
+  </repository>
+</repositories>
+
+<dependencies>
+  <dependency>
     <groupId>io.unifiedworkflow</groupId>
     <artifactId>unified-workflow-sdk</artifactId>
     <version>1.2.0</version>
-</dependency>
+  </dependency>
+</dependencies>
+```
+
+Verify it resolves:
+```bash
+mvn dependency:resolve
 ```
 
 ### Gradle
 
+Add to `build.gradle`:
+
 ```groovy
-implementation 'io.unifiedworkflow:unified-workflow-sdk:1.2.0'
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/uwf-application/unified-workflow")
+        credentials {
+            username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
+            password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
+}
+
+dependencies {
+    implementation 'io.unifiedworkflow:unified-workflow-sdk:1.2.0'
+}
+```
+
+Set credentials in `~/.gradle/gradle.properties`:
+```properties
+gpr.user=YOUR_GITHUB_USERNAME
+gpr.token=YOUR_GITHUB_TOKEN
 ```
 
 ---

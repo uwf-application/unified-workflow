@@ -563,11 +563,16 @@ Benefits:
 
 ## Java SDK
 
-The Java SDK is published to GitHub Packages (Maven).
+The Java SDK is published to **GitHub Packages** (not Maven Central).
+See the full guide: [`pkg/client/java/README.md`](pkg/client/java/README.md)
 
-### Maven setup
+### Step 1 — Create a GitHub personal access token
 
-Add to `~/.m2/settings.xml` — GitHub Packages requires authentication even for public packages:
+Go to https://github.com/settings/tokens → **Generate new token (classic)** → tick **`read:packages`** → copy the token.
+
+### Step 2 — Add credentials to `~/.m2/settings.xml`
+
+GitHub Packages requires authentication even for public packages:
 
 ```xml
 <settings>
@@ -581,9 +586,7 @@ Add to `~/.m2/settings.xml` — GitHub Packages requires authentication even for
 </settings>
 ```
 
-> Your GitHub token needs the `read:packages` scope. Create one at https://github.com/settings/tokens
-
-Add to `pom.xml`:
+### Step 3 — Add repository and dependency to `pom.xml`
 
 ```xml
 <repositories>
@@ -593,16 +596,41 @@ Add to `pom.xml`:
   </repository>
 </repositories>
 
-<dependency>
-  <groupId>io.unifiedworkflow</groupId>
-  <artifactId>unified-workflow-sdk</artifactId>
-  <version>1.2.0</version>
-</dependency>
+<dependencies>
+  <dependency>
+    <groupId>io.unifiedworkflow</groupId>
+    <artifactId>unified-workflow-sdk</artifactId>
+    <version>1.2.0</version>
+  </dependency>
+</dependencies>
 ```
 
-Then run:
 ```bash
 mvn dependency:resolve
+```
+
+### Gradle
+
+```groovy
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/uwf-application/unified-workflow")
+        credentials {
+            username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
+            password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
+}
+
+dependencies {
+    implementation 'io.unifiedworkflow:unified-workflow-sdk:1.2.0'
+}
+```
+
+`~/.gradle/gradle.properties`:
+```properties
+gpr.user=YOUR_GITHUB_USERNAME
+gpr.token=YOUR_GITHUB_TOKEN
 ```
 
 ## Conclusion
